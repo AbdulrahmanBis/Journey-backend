@@ -27,7 +27,6 @@ public class DashboardService {
      * GET /api/dashboard/senior/:seniorId
      *
      * Returns every learner under this senior, each with their full list of journey views.
-     * Mirrors JS: server.get('/api/learnersJourneysBySenior/:seniorId', ...)
      */
     public List<LearnerSummaryDto> getSeniorOverview(String seniorId) {
         List<User> learners = userRepository.findByRoleAndSeniorId(UserRole.LEARNER.getCode(), seniorId);
@@ -40,7 +39,6 @@ public class DashboardService {
      * GET /api/dashboard/manager
      *
      * Returns every senior with their learners nested inside.
-     * Mirrors JS: server.get('/api/learnersJourneysByManager', ...)
      */
     public List<SeniorSummaryDto> getManagerOverview() {
         List<User> seniors = userRepository.findByRole(UserRole.SENIOR.getCode());
@@ -49,11 +47,10 @@ public class DashboardService {
         }
         return seniors.stream()
                 .map(senior -> {
-                    //TO
                     List<LearnerSummaryDto> learnerSummaries = getSeniorOverview(senior.getId());
                     return new SeniorSummaryDto(
                             senior.getId(), senior.getName(), senior.getEmail(),
-                            UserRole.SENIOR, senior.getCreatedAt(), learnerSummaries);
+                            UserRole.SENIOR.toDto(), senior.getCreatedAt(), learnerSummaries);
                 })
                 .toList();
     }
@@ -61,7 +58,6 @@ public class DashboardService {
     // ─── Helper ───────────────────────────────────────────────────────────────
 
     private LearnerSummaryDto buildLearnerSummary(User learner) {
-        // Load all LearnerJourney rows for this learner and build the full view for each
         List<LearnerJourneyViewDto> journeyViews =
                 learnerJourneyRepository.findByLearnerId(learner.getId()).stream()
                         .map(learnerJourneyService::buildView)
@@ -69,7 +65,7 @@ public class DashboardService {
 
         return new LearnerSummaryDto(
                 learner.getId(), learner.getName(), learner.getEmail(),
-                UserRole.LEARNER, learner.getSeniorId(), learner.getCreatedAt(),
+                UserRole.LEARNER.toDto(), learner.getSeniorId(), learner.getCreatedAt(),
                 journeyViews);
     }
 }

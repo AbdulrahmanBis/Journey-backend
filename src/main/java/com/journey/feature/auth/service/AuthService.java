@@ -15,8 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Arrays;
-
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -32,28 +30,22 @@ public class AuthService {
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Incorrect email or password.");
         }
-        String test = passwordEncoder.encode("admin123");
-        String test2 = passwordEncoder.encode("manager123");
 
         if (!passwordEncoder.matches(req.password(), user.getPassword())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Incorrect email or password.");
         }
-        String selectedRole = Arrays.stream(UserRole.values())
-                .filter(r -> r.getCode() == user.getRole())
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown role"))
-                .getEnglish();
 
-        String token = jwtUtil.generateToken(user.getId(), selectedRole);
+        String role = UserRole.fromCode(user.getRole()).getEnglish();
+        String token = jwtUtil.generateToken(user.getId(), role);
         return new AuthResponse(userService.toDto(user), token);
     }
 
-//    public AuthResponse signup(SignupRequest req) {
-//        req.
-//        UserDto created = userService.createUser(new CreateUserRequest(
-//                req.name(), req.email(), req.password(), UserRole.LEARNER, null
-//        ));
-//        String token = jwtUtil.generateToken(created.id(), UserRole(). );
-//        return new AuthResponse(created, token);
-//    }
+    /** Self-service signup always creates a Learner account. */
+    public AuthResponse signup(SignupRequest req) {
+        UserDto created = userService.createUser(new CreateUserRequest(
+                req.name(), req.email(), req.password(), UserRole.LEARNER.getCode(), null
+        ));
+        String token = jwtUtil.generateToken(created.id(), UserRole.LEARNER.getEnglish());
+        return new AuthResponse(created, token);
+    }
 }

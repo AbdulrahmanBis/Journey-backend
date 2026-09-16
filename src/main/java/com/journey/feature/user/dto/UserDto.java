@@ -1,7 +1,7 @@
 package com.journey.feature.user.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.journey.common.enums.UserRole;
+import com.journey.common.dto.EnumValueDto;
 
 import java.time.LocalDateTime;
 
@@ -10,7 +10,7 @@ public record UserDto(
         String id,
         String name,
         String email,
-        String role,
+        EnumValueDto role,
         String seniorId,
         LocalDateTime createdAt
 ) {}

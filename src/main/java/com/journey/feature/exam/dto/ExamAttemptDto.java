@@ -1,5 +1,7 @@
 package com.journey.feature.exam.dto;
 
+import com.journey.common.dto.EnumValueDto;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -11,7 +13,7 @@ public record ExamAttemptDto(
 
         String examId,
 
-        Integer status,
+        EnumValueDto status,
 
         List<ExamAnswerDto> answers,
 

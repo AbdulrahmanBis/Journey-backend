@@ -2,4 +2,5 @@ package com.journey.feature.learnerJourney.dto;
 
 import jakarta.validation.constraints.NotNull;
 
-public record UpdateJourneyStatusRequest(@NotNull String status) {}
+/** {@code status} is the ItemStatus code (1001-1005). */
+public record UpdateJourneyStatusRequest(@NotNull Integer status) {}

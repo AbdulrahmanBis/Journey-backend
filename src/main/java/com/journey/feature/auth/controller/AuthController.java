@@ -23,8 +23,8 @@ public class AuthController {
     }
 
     /** POST /api/auth/signup — always creates a Learner account */
-//    @PostMapping("/signup")
-//    public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest req) {
-//        return ResponseEntity.ok(authService.signup(req));
-//    }
+    @PostMapping("/signup")
+    public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest req) {
+        return ResponseEntity.ok(authService.signup(req));
+    }
 }

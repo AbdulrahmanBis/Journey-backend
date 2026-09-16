@@ -1,6 +1,9 @@
 package com.journey.feature.learnerJourney.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.journey.common.dto.EnumValueDto;
+import com.journey.feature.exam.dto.ExamAttemptDto;
+import com.journey.feature.exam.dto.ExamDto;
 import com.journey.feature.journey.dto.JourneyDto;
 
 import java.time.LocalDateTime;
@@ -15,12 +18,16 @@ public record LearnerJourneyViewDto(
         String assignedById,
         String assignedByName,
         LocalDateTime assignedAt,
-        String status,
+        EnumValueDto status,
         LocalDateTime startedAt,
         LocalDateTime completedAt,
         // Composed / computed fields
         JourneyDto journey,
         List<JourneyItemWithProgressDto> items,
         int percentComplete,
-        double totalTimeSpentHours
+        double totalTimeSpentHours,
+        /** Present when the journey template has an exam configured. */
+        ExamDto exam,
+        /** Present once the learner has submitted an attempt. */
+        ExamAttemptDto examAttempt
 ) {}

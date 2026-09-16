@@ -2,6 +2,11 @@ package com.journey.feature.learnerJourney.service;
 
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.UserRole;
+import com.journey.common.service.IdGeneratorService;
+import com.journey.feature.exam.dto.ExamAttemptDto;
+import com.journey.feature.exam.dto.ExamDto;
+import com.journey.feature.exam.service.ExamService;
+import com.journey.feature.journey.dto.JourneyItemDto;
 import com.journey.feature.journey.entity.Journey;
 import com.journey.feature.journey.entity.JourneyItem;
 import com.journey.feature.journey.service.JourneyService;
@@ -29,24 +34,19 @@ public class LearnerJourneyService {
     private final LearnerJourneyItemRepository learnerJourneyItemRepository;
     private final NoteRepository noteRepository;
     private final JourneyService journeyService;
+    private final ExamService examService;
+    private final IdGeneratorService idGenerator;
 
     // ─── Queries ──────────────────────────────────────────────────────────────
 
-    /**
-     * GET /api/learner-journeys?learnerId=x
-     * Returns all journey views for a given learner.
-     */
+    /** GET /api/learner-journeys?learnerId=x */
     public List<LearnerJourneyViewDto> getLearnerJourneyViews(String learnerId) {
         return learnerJourneyRepository.findByLearnerId(learnerId).stream()
                 .map(this::buildView)
                 .toList();
     }
 
-    /**
-     * GET /api/learner-journeys/:id
-     * Returns the fully composed view for one LearnerJourney row.
-     * This mirrors the JS /api/journeylog/:id — joins journey template, items, and per-learner progress.
-     */
+    /** GET /api/learner-journeys/:id — the fully composed quest-log view. */
     public LearnerJourneyViewDto getLearnerJourneyView(String id) {
         LearnerJourney lj = findLjOrThrow(id);
         return buildView(lj);
@@ -56,8 +56,7 @@ public class LearnerJourneyService {
 
     /**
      * POST /api/learner-journeys
-     * Assign a journey template to a learner and auto-create a LearnerJourneyItem row for each template item.
-     * Mirrors the JS assignJourney logic.
+     * Assign a journey template to a learner and auto-create a LearnerJourneyItem row for each item.
      */
     @Transactional
     public LearnerJourneyViewDto assignJourney(AssignJourneyRequest req) {
@@ -67,6 +66,7 @@ public class LearnerJourneyService {
         }
 
         LearnerJourney lj = LearnerJourney.builder()
+                .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY, "lj-"))
                 .journeyId(req.journeyId())
                 .learnerId(req.learnerId())
                 .assignedById(req.assignedById())
@@ -79,6 +79,7 @@ public class LearnerJourneyService {
         List<JourneyItem> templateItems = journeyService.getItemEntitiesForJourney(req.journeyId());
         templateItems.forEach(item -> {
             LearnerJourneyItem lji = LearnerJourneyItem.builder()
+                    .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY_ITEM, "lji-"))
                     .learnerJourneyId(saved.getId())
                     .journeyItemId(item.getId())
                     .status(ItemStatus.NEW.getCode())
@@ -89,35 +90,33 @@ public class LearnerJourneyService {
         return buildView(saved);
     }
 
-    /**
-     * PATCH /api/learner-journeys/:id/status
-     */
+    /** PATCH /api/learner-journeys/:id/status */
     @Transactional
     public LearnerJourneyViewDto updateJourneyStatus(String id, UpdateJourneyStatusRequest req) {
         LearnerJourney lj = findLjOrThrow(id);
-        lj.setStatus(ItemStatus.fromEnglish(req.status()).getCode());
-        if (req.status().equals(ItemStatus.COMPLETED.getEnglish()) && lj.getCompletedAt() == null) {
+        ItemStatus status = resolveStatus(req.status());
+
+        lj.setStatus(status.getCode());
+        if (status == ItemStatus.COMPLETED && lj.getCompletedAt() == null) {
             lj.setCompletedAt(LocalDateTime.now());
         }
         learnerJourneyRepository.save(lj);
         return buildView(lj);
     }
 
-    /**
-     * PATCH /api/learner-journey-items/:itemId/status
-     * Mirrors the JS updatejurneyItemStatus logic.
-     */
+    /** PATCH /api/learner-journey-items/:itemId/status */
     @Transactional
     public LearnerJourneyItemDto updateItemStatus(String itemId, UpdateItemStatusRequest req) {
         LearnerJourneyItem item = findLjiOrThrow(itemId);
+        ItemStatus status = resolveStatus(req.status());
 
-        if (req.status().equals(ItemStatus.COMPLETED.getEnglish()) &&
-                (req.timeSpentHours() == null || req.timeSpentHours() <= 0)) {
+        if (status == ItemStatus.COMPLETED
+                && (req.timeSpentHours() == null || req.timeSpentHours() <= 0)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "timeSpentHours is required when marking an item completed.");
         }
 
-        item.setStatus(ItemStatus.fromEnglish(req.status()).getCode());
+        item.setStatus(status.getCode());
         item.setUpdatedAt(LocalDateTime.now());
         if (req.timeSpentHours() != null) {
             item.setTimeSpentHours(req.timeSpentHours());
@@ -131,89 +130,104 @@ public class LearnerJourneyService {
         return toItemDto(saved);
     }
 
-    /**
-     * POST /api/learner-journey-items/:itemId/notes
-     * Mirrors the JS addNote logic.
-     */
+    /** POST /api/learner-journey-items/:itemId/notes */
     @Transactional
     public NoteDto addNote(String itemId, AddNoteRequest req) {
-        // Verify the item exists
         findLjiOrThrow(itemId);
 
+        UserRole actorRole;
+        try {
+            actorRole = UserRole.fromCode(req.actorRole());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unknown actorRole code: " + req.actorRole());
+        }
+
         Note note = Note.builder()
+                .id(idGenerator.next(IdGeneratorService.NOTE, "n-"))
                 .learnerJourneyItemId(itemId)
                 .message(req.message())
                 .actorId(req.actorId())
                 .actorName(req.actorName())
-                .actorRole(UserRole.fromEnglish(req.actorRole()).getCode())
+                .actorRole(actorRole.getCode())
                 .build();
 
         return toNoteDto(noteRepository.save(note));
     }
 
-    // ─── View builder (core JS join logic) ───────────────────────────────────
+    // ─── View builder ────────────────────────────────────────────────────────
 
     /**
      * Builds the fully composed LearnerJourneyViewDto:
      *   1. Load the Journey template and its items (ordered)
-     *   2. For each template item, find the learner's LearnerJourneyItem (progress)
+     *   2. For each template item, find the learner's progress row
      *   3. Compute percentComplete and totalTimeSpentHours
-     *
-     * This reproduces exactly what the JS /api/journeylog/:id and
-     * /api/learnersJourneysBySenior/:seniorId endpoints compute inline.
+     *   4. Attach the journey's exam and this learner's attempt, if any
      */
     public LearnerJourneyViewDto buildView(LearnerJourney lj) {
         Journey journey = journeyService.getEntityById(lj.getJourneyId());
-        List<JourneyItem> templateItems = journeyService.getItemEntitiesForJourney(lj.getJourneyId());
+        // DTOs rather than entities: these already carry each item's attachments, which the
+        // learner needs in order to see any of the item's content.
+        List<JourneyItemDto> templateItems = journeyService.getItemsForJourney(lj.getJourneyId());
         List<LearnerJourneyItem> progressRows =
                 learnerJourneyItemRepository.findByLearnerJourneyId(lj.getId());
 
-        // Compose items — join template item with the matching progress row
         List<JourneyItemWithProgressDto> itemViews = templateItems.stream()
                 .map(ti -> {
                     LearnerJourneyItem progress = progressRows.stream()
-                            .filter(p -> p.getJourneyItemId().equals(ti.getId()))
+                            .filter(p -> p.getJourneyItemId().equals(ti.id()))
                             .findFirst()
                             .orElse(null);
 
-                    // Fallback: if no progress row exists (shouldn't happen after assign) create a virtual one
+                    // Fallback: if no progress row exists (shouldn't happen after assign) use a virtual one
                     LearnerJourneyItemDto progressDto = progress != null
                             ? toItemDto(progress)
                             : new LearnerJourneyItemDto(
-                            null, lj.getId(), ti.getId(),
-                            ItemStatus.NEW.getEnglish(), null, lj.getAssignedAt(), List.of()
+                            null, lj.getId(), ti.id(),
+                            ItemStatus.NEW.toDto(), null, lj.getAssignedAt(), List.of()
                     );
 
                     return new JourneyItemWithProgressDto(
-                            ti.getId(), ti.getJourneyId(), ti.getTitle(),
-                            ti.getDescription(), ti.getOrder(), progressDto);
+                            ti.id(), ti.journeyId(), ti.title(),
+                            ti.description(), ti.order(), ti.attachments(), progressDto);
                 })
                 .toList();
 
-        // Compute percentComplete — completed items / total items * 100
         long completedCount = itemViews.stream()
-                .filter(i -> i.progress() != null && i.progress().status().equals(ItemStatus.COMPLETED.getEnglish()))
+                .filter(LearnerJourneyService::isCompleted)
                 .count();
         int percentComplete = itemViews.isEmpty()
                 ? 0
                 : (int) Math.round((double) completedCount / itemViews.size() * 100);
 
-        // Compute totalTimeSpentHours — sum of completed items only (matches JS logic)
+        // Total hours — sum of completed items only
         double totalHours = itemViews.stream()
-                .filter(i -> i.progress() != null && i.progress().status().equals(ItemStatus.COMPLETED.getEnglish()))
+                .filter(LearnerJourneyService::isCompleted)
                 .mapToDouble(i -> i.progress().timeSpentHours() != null ? i.progress().timeSpentHours() : 0.0)
                 .sum();
         totalHours = Math.round(totalHours * 10.0) / 10.0;
 
+        ExamDto exam = examService.getExam(lj.getJourneyId());
+        ExamAttemptDto attempt = examService.getAttempt(lj.getId());
+
         return new LearnerJourneyViewDto(
                 lj.getId(), lj.getJourneyId(), lj.getLearnerId(),
                 lj.getAssignedById(), lj.getAssignedByName(), lj.getAssignedAt(),
-                ItemStatus.fromCode(lj.getStatus()).getEnglish(), lj.getStartedAt(), lj.getCompletedAt(),
+                ItemStatus.fromCode(lj.getStatus()).toDto(), lj.getStartedAt(), lj.getCompletedAt(),
                 journeyService.toDto(journey),
                 itemViews,
                 percentComplete,
-                totalHours
+                totalHours,
+                exam,
+                attempt
         );
+    }
+
+    /** True when this composed item view is in the COMPLETED state. */
+    public static boolean isCompleted(JourneyItemWithProgressDto item) {
+        return item.progress() != null
+                && item.progress().status() != null
+                && item.progress().status().code() == ItemStatus.COMPLETED.getCode();
     }
 
     // ─── Auto-status promotion ────────────────────────────────────────────────
@@ -245,15 +259,25 @@ public class LearnerJourneyService {
         List<NoteDto> notes = item.getNotes().stream().map(this::toNoteDto).toList();
         return new LearnerJourneyItemDto(
                 item.getId(), item.getLearnerJourneyId(), item.getJourneyItemId(),
-                ItemStatus.fromCode(item.getStatus()).getEnglish(), item.getTimeSpentHours(), item.getUpdatedAt(), notes);
+                ItemStatus.fromCode(item.getStatus()).toDto(),
+                item.getTimeSpentHours(), item.getUpdatedAt(), notes);
     }
 
     public NoteDto toNoteDto(Note n) {
         return new NoteDto(n.getId(), n.getActorId(), n.getActorName(),
-                UserRole.fromCode(n.getActorRole()).getEnglish(), n.getMessage(), n.getTimestamp());
+                UserRole.fromCode(n.getActorRole()).toDto(), n.getMessage(), n.getTimestamp());
     }
 
-    // ─── Internal finders ─────────────────────────────────────────────────────
+    // ─── Internal helpers ─────────────────────────────────────────────────────
+
+    /** Turns an inbound status code into the enum, answering 400 rather than 500 when it's bogus. */
+    private ItemStatus resolveStatus(Integer code) {
+        try {
+            return ItemStatus.fromCode(code);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown status code: " + code);
+        }
+    }
 
     private LearnerJourney findLjOrThrow(String id) {
         return learnerJourneyRepository.findById(id)

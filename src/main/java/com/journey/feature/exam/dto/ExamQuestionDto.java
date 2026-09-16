@@ -1,12 +1,14 @@
 package com.journey.feature.exam.dto;
 
+import com.journey.common.dto.EnumValueDto;
+
 import java.util.List;
 
 public record ExamQuestionDto(
 
         String id,
 
-        Integer type,
+        EnumValueDto type,
 
         String prompt,
 

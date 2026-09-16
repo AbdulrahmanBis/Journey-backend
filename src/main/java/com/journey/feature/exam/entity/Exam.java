@@ -8,7 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.UuidGenerator;
 
 import java.time.LocalDateTime;
 
@@ -21,11 +20,10 @@ import java.time.LocalDateTime;
 public class Exam {
 
     @Id
-    @UuidGenerator
     @Column(length = 36)
     private String id;
 
-    @Column(name = "journey_id", nullable = false)
+    @Column(name = "journey_id", nullable = false, length = 36)
     private String journeyId;
 
     @Column(nullable = false)

@@ -1,10 +1,23 @@
 package com.journey.common.enums;
 
+import com.journey.common.dto.EnumValueDto;
+import lombok.Getter;
+
+/**
+ * The kind of question on an exam.
+ *
+ * <p>Previously this enum held grading statuses (Submitted/Pending/Failed/Passed), which duplicated
+ * {@code ExamStatus} and had nothing to do with question types — nothing referenced it. It now holds
+ * the three real question types, matching what the frontend renders.
+ *
+ * <p>Stored in {@code exam_questions.question_type} as the {@code code}.
+ */
+@Getter
 public enum ExamQuestionType {
-    SUBMITTED(1001, "Submitted", "تم التسليم"),
-    PENDING(1002, "Pending", "قيد الانتظار"),
-    FAILED(1003, "Failed", "راسب"),
-    PASSED(1004, "Passed", "ناجح");
+
+    MULTIPLE_CHOICE(1001, "Multiple choice", "اختيار من متعدد"),
+    YES_NO(1002, "Yes / No", "نعم / لا"),
+    OPEN(1003, "Open question", "سؤال مفتوح");
 
     private final int code;
     private final String english;
@@ -16,15 +29,34 @@ public enum ExamQuestionType {
         this.arabic = arabic;
     }
 
-    public int getCode() {
-        return code;
+    public EnumValueDto toDto() {
+        return new EnumValueDto(code, english, arabic);
     }
 
-    public String getEnglish() {
-        return english;
+    public static ExamQuestionType fromCode(int code) {
+        for (ExamQuestionType type : values()) {
+            if (type.code == code) {
+                return type;
+            }
+        }
+        throw new IllegalArgumentException("Unknown exam question type code: " + code);
     }
 
-    public String getArabic() {
-        return arabic;
+    public static ExamQuestionType fromEnglish(String english) {
+        for (ExamQuestionType type : values()) {
+            if (type.english.equalsIgnoreCase(english)) {
+                return type;
+            }
+        }
+        throw new IllegalArgumentException("Unknown exam question type: " + english);
+    }
+
+    public static ExamQuestionType fromArabic(String arabic) {
+        for (ExamQuestionType type : values()) {
+            if (type.arabic.equals(arabic)) {
+                return type;
+            }
+        }
+        throw new IllegalArgumentException("Unknown exam question type: " + arabic);
     }
 }

@@ -24,10 +24,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String authHeader = request.getHeader("Authorization");
+        String token = resolveToken(request);
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
+        if (token != null) {
             if (jwtUtil.isTokenValid(token)) {
                 String userId = jwtUtil.extractUserId(token);
                 Object roleClaim = jwtUtil.extractClaims(token).get("role");
@@ -43,5 +42,30 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Normally the bearer header. Media elements ({@code <img>}, {@code <video>}) cannot send
+     * headers, and fetching them through XHR into a blob would break range requests — and with them
+     * video seeking — so {@code /api/files/} additionally accepts {@code ?token=}.
+     *
+     * <p>Deliberately limited to that one prefix: tokens in URLs can leak through access logs and
+     * Referer headers, so the rest of the API stays header-only. Short-lived signed URLs would be
+     * the stronger fix if these ever leave the internal network.
+     */
+    private String resolveToken(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
+        }
+
+        String path = request.getRequestURI();
+        if (path != null && path.startsWith("/api/files/")) {
+            String queryToken = request.getParameter("token");
+            if (queryToken != null && !queryToken.isBlank()) {
+                return queryToken;
+            }
+        }
+        return null;
     }
 }

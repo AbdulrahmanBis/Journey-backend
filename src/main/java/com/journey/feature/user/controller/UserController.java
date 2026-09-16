@@ -10,8 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -22,7 +22,7 @@ public class UserController {
 
     private final UserService userService;
 
-    /** GET /api/users?role=&seniorId= */
+    /** GET /api/users?role=&seniorId= — role accepts the code (1003) or the English name (Senior). */
     @GetMapping
     public ResponseEntity<List<UserDto>> getUsers(
             @RequestParam(required = false) String role,
@@ -32,17 +32,10 @@ public class UserController {
             return ResponseEntity.ok(userService.getLearnersBySenior(seniorId));
         }
         if (role != null) {
-            //TODO: fix userrole
-            UserRole userRole = Arrays.stream(UserRole.values())
-                    .filter(r -> r.getEnglish().equalsIgnoreCase(role))
-                    .findFirst()
-                    .orElseThrow();
-
-            return ResponseEntity.ok(userService.getUsersByRole(userRole));
-    }
+            return ResponseEntity.ok(userService.getUsersByRole(parseRole(role)));
+        }
         return ResponseEntity.ok(userService.getAllUsers());
     }
-
 
     /** GET /api/users/:id */
     @GetMapping("/{id}")
@@ -76,5 +69,20 @@ public class UserController {
     public ResponseEntity<Void> deleteUser(@PathVariable String id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Accepts either the numeric code or the English name, so old links keep working. */
+    private UserRole parseRole(String role) {
+        try {
+            return UserRole.fromCode(Integer.parseInt(role.trim()));
+        } catch (NumberFormatException notACode) {
+            try {
+                return UserRole.fromEnglish(role);
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role: " + role);
+            }
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role code: " + role);
+        }
     }
 }

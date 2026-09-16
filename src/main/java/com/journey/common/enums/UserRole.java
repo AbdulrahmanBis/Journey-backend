@@ -1,7 +1,8 @@
 package com.journey.common.enums;
 
+import com.journey.common.dto.EnumValueDto;
+
 import java.util.Arrays;
-import java.util.Objects;
 
 public enum UserRole{
 
@@ -43,5 +44,9 @@ public enum UserRole{
                 .filter(role -> role.getEnglish().equalsIgnoreCase(english))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown role: " + english));
+    }
+
+    public EnumValueDto toDto() {
+        return new EnumValueDto(code, english, arabic);
     }
 }

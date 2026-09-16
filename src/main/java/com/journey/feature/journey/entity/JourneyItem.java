@@ -8,7 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.UuidGenerator;
 
 @Entity
 @Table(name = "journey_items")
@@ -19,7 +18,6 @@ import org.hibernate.annotations.UuidGenerator;
 public class JourneyItem {
 
     @Id
-    @UuidGenerator
     @Column(length = 36)
     private String id;
 

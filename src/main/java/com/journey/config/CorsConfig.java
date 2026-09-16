@@ -20,8 +20,7 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        List<String> origins = Arrays.asList(allowedOriginsRaw.split(","));
-        config.setAllowedOrigins(origins);
+        config.setAllowedOrigins(origins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Authorization"));
@@ -31,5 +30,21 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
         return source;
+    }
+
+    /**
+     * The same origins, written for a CSP {@code frame-ancestors} directive: the front end frames
+     * PDF attachments served by {@code /api/files/**}, and in development it does so from a
+     * different port than the API. See {@link SecurityConfig}.
+     */
+    public String frameAncestors() {
+        return "'self' " + String.join(" ", origins());
+    }
+
+    private List<String> origins() {
+        return Arrays.stream(allowedOriginsRaw.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
     }
 }

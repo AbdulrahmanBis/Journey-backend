@@ -18,10 +18,10 @@ public class ExamAnswer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "attempt_id", nullable = false)
+    @Column(name = "attempt_id", nullable = false, length = 36)
     private String attemptId;
 
-    @Column(name = "question_id", nullable = false)
+    @Column(name = "question_id", nullable = false, length = 36)
     private String questionId;
 
     @Column(name = "selected_option_index")

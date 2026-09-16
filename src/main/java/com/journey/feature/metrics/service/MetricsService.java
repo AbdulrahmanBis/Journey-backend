@@ -1,10 +1,11 @@
 package com.journey.feature.metrics.service;
 
+import com.journey.common.enums.ExamAttemptStatus;
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.UserRole;
+import com.journey.feature.exam.dto.ExamAttemptDto;
 import com.journey.feature.learnerJourney.dto.JourneyItemWithProgressDto;
 import com.journey.feature.learnerJourney.dto.LearnerJourneyViewDto;
-import com.journey.feature.learnerJourney.entity.LearnerJourney;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyRepository;
 import com.journey.feature.learnerJourney.service.LearnerJourneyService;
 import com.journey.feature.metrics.dto.*;
@@ -31,10 +32,7 @@ public class MetricsService {
 
     // ─── Public API ───────────────────────────────────────────────────────────
 
-    /**
-     * GET /api/metrics/learner/:id
-     * Mirrors JS /api/metrics when role === 'learner' (adapted to per-learner scope).
-     */
+    /** GET /api/metrics/learner/:id */
     public LearnerMetricsDto getLearnerMetrics(String learnerId) {
         User learner = userRepository.findById(learnerId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
@@ -43,19 +41,13 @@ public class MetricsService {
         return buildLearnerMetrics(learnerId, learner.getName(), views);
     }
 
-    /**
-     * GET /api/metrics/senior/:id
-     * Mirrors JS /api/metrics when role === 'senior'.
-     */
+    /** GET /api/metrics/senior/:id */
     public GroupMetricsDto getSeniorMetrics(String seniorId) {
         List<User> learners = userRepository.findByRoleAndSeniorId(UserRole.LEARNER.getCode(), seniorId);
         return buildGroupMetrics(learners);
     }
 
-    /**
-     * GET /api/metrics/org
-     * Mirrors JS /api/metrics when role === 'manager' | 'admin'.
-     */
+    /** GET /api/metrics/org */
     public OrgMetricsDto getOrgMetrics() {
         List<User> seniors = userRepository.findByRole(UserRole.SENIOR.getCode());
         if (seniors.isEmpty()) {
@@ -92,22 +84,30 @@ public class MetricsService {
                 base.perLearner(), seniors.size(), perSenior);
     }
 
+    // ─── Status helpers ───────────────────────────────────────────────────────
+
+    private static boolean isStatus(LearnerJourneyViewDto view, ItemStatus status) {
+        return view.status() != null && view.status().code() == status.getCode();
+    }
+
+    private static boolean isActive(LearnerJourneyViewDto view) {
+        return !isStatus(view, ItemStatus.COMPLETED) && !isStatus(view, ItemStatus.CANCELLED);
+    }
+
     // ─── Builders ─────────────────────────────────────────────────────────────
 
     private LearnerMetricsDto buildLearnerMetrics(String learnerId, String learnerName,
                                                   List<LearnerJourneyViewDto> views) {
         int total = views.size();
-        int active = (int) views.stream()
-                .filter(v -> !v.status().equals(ItemStatus.COMPLETED.getEnglish()) && !v.status().equals(ItemStatus.CANCELLED.getEnglish()))
-                .count();
-        int completed = (int) views.stream().filter(v -> v.status().equals(ItemStatus.COMPLETED.getEnglish())).count();
-        int cancelled = (int) views.stream().filter(v -> v.status().equals(ItemStatus.CANCELLED.getEnglish())).count();
+        int active = (int) views.stream().filter(MetricsService::isActive).count();
+        int completed = (int) views.stream().filter(v -> isStatus(v, ItemStatus.COMPLETED)).count();
+        int cancelled = (int) views.stream().filter(v -> isStatus(v, ItemStatus.CANCELLED)).count();
 
         List<JourneyItemWithProgressDto> allItems = views.stream()
                 .flatMap(v -> v.items().stream()).toList();
         int totalItems = allItems.size();
         int completedItems = (int) allItems.stream()
-                .filter(i -> i.progress() != null && i.progress().status().equals(ItemStatus.COMPLETED.getEnglish()))
+                .filter(LearnerJourneyService::isCompleted)
                 .count();
         int itemCompletionPct = totalItems == 0 ? 0
                 : (int) Math.round((double) completedItems / totalItems * 100);
@@ -117,7 +117,7 @@ public class MetricsService {
 
         ExamStatsDto examStats = buildExamStats(views);
         List<JourneyItemWithProgressDto> completedItemViews = allItems.stream()
-                .filter(i -> i.progress() != null && i.progress().status().equals(ItemStatus.COMPLETED.getEnglish()))
+                .filter(LearnerJourneyService::isCompleted)
                 .toList();
 
         return new LearnerMetricsDto(
@@ -140,11 +140,9 @@ public class MetricsService {
                                                        List<LearnerJourneyViewDto> allViews) {
         int learnerCount = learners.size();
         int totalJourneys = allViews.size();
-        int activeJourneys = (int) allViews.stream()
-                .filter(v -> !v.status().equals(ItemStatus.COMPLETED.getEnglish()) && !v.status().equals(ItemStatus.CANCELLED.getEnglish()))
-                .count();
+        int activeJourneys = (int) allViews.stream().filter(MetricsService::isActive).count();
         int completedJourneys = (int) allViews.stream()
-                .filter(v -> v.status().equals(ItemStatus.COMPLETED.getEnglish())).count();
+                .filter(v -> isStatus(v, ItemStatus.COMPLETED)).count();
         double totalHours = round(allViews.stream()
                 .mapToDouble(LearnerJourneyViewDto::totalTimeSpentHours).sum());
         int avgCompletion = allViews.isEmpty() ? 0
@@ -155,7 +153,7 @@ public class MetricsService {
 
         List<JourneyItemWithProgressDto> allCompletedItems = allViews.stream()
                 .flatMap(v -> v.items().stream())
-                .filter(i -> i.progress() != null && i.progress().status().equals(ItemStatus.COMPLETED.getEnglish()))
+                .filter(LearnerJourneyService::isCompleted)
                 .toList();
 
         // Per-learner breakdown table
@@ -165,8 +163,8 @@ public class MetricsService {
             ExamStatsDto lExams = buildExamStats(lViews);
             return new GroupMetricsDto.PerLearnerRow(
                     learner.getId(), learner.getName(),
-                    (int) lViews.stream().filter(v -> !v.status().equals(ItemStatus.COMPLETED.getEnglish()) && !v.status().equals(ItemStatus.CANCELLED.getEnglish())).count(),
-                    (int) lViews.stream().filter(v -> v.status().equals(ItemStatus.COMPLETED.getEnglish())).count(),
+                    (int) lViews.stream().filter(MetricsService::isActive).count(),
+                    (int) lViews.stream().filter(v -> isStatus(v, ItemStatus.COMPLETED)).count(),
                     round(lViews.stream().mapToDouble(LearnerJourneyViewDto::totalTimeSpentHours).sum()),
                     lViews.isEmpty() ? 0 : (int) Math.round(lViews.stream().mapToInt(LearnerJourneyViewDto::percentComplete).average().orElse(0)),
                     lExams.passed(), lExams.failed());
@@ -181,17 +179,49 @@ public class MetricsService {
                 perLearner);
     }
 
+    /**
+     * Real exam statistics, computed from the exam and attempt now embedded in each composed view.
+     * (This previously returned hardcoded zeros while the exam feature was unfinished.)
+     */
     private ExamStatsDto buildExamStats(List<LearnerJourneyViewDto> views) {
-        // Placeholder: exam stats require the exam feature.
-        // When ExamService is added, inject it here and compute actual values.
-        return new ExamStatsDto(0, 0, 0, 0, 0, 0, null);
+        int configured = (int) views.stream().filter(v -> v.exam() != null).count();
+
+        List<ExamAttemptDto> attempts = views.stream()
+                .map(LearnerJourneyViewDto::examAttempt)
+                .filter(Objects::nonNull)
+                .toList();
+
+        int taken = attempts.size();
+        int underReview = (int) attempts.stream()
+                .filter(a -> a.status() != null && a.status().code() == ExamAttemptStatus.SUBMITTED.getCode())
+                .count();
+
+        List<ExamAttemptDto> gradedAttempts = attempts.stream()
+                .filter(a -> a.status() != null && a.status().code() == ExamAttemptStatus.GRADED.getCode())
+                .toList();
+
+        int graded = gradedAttempts.size();
+        int passed = (int) gradedAttempts.stream().filter(a -> Boolean.TRUE.equals(a.passed())).count();
+        int failed = graded - passed;
+
+        Double avgScore = gradedAttempts.stream()
+                .map(ExamAttemptDto::scorePercent)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .average()
+                .stream()
+                .boxed()
+                .map(this::round)
+                .findFirst()
+                .orElse(null);
+
+        return new ExamStatsDto(configured, taken, underReview, graded, passed, failed, avgScore);
     }
 
     // ─── Hours bucketing ──────────────────────────────────────────────────────
 
     /**
      * Groups timeSpentHours from completed items by their updatedAt date.
-     * Each point is the updatedAt of the LearnerJourneyItem at the time it was completed.
      */
     private record HoursPoint(LocalDateTime updatedAt, double hours) {}
 
@@ -252,7 +282,6 @@ public class MetricsService {
         List<HoursBucketDto> buckets = new ArrayList<>();
 
         for (int i = quarters - 1; i >= 0; i--) {
-            // end of this window = first day of (current month - i*3 months + 1 month)
             LocalDate windowEnd = today.withDayOfMonth(1).minusMonths((long) i * 3).plusMonths(1);
             LocalDate windowStart = windowEnd.minusMonths(3);
 

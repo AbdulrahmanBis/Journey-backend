@@ -1,5 +1,6 @@
 package com.journey.common.enums;
 
+import com.journey.common.dto.EnumValueDto;
 import lombok.Getter;
 
 @Getter
@@ -46,5 +47,9 @@ public enum ItemStatus {
             }
         }
         throw new IllegalArgumentException("Unknown arabic: " + arabic);
+    }
+
+    public EnumValueDto toDto() {
+        return new EnumValueDto(code, english, arabic);
     }
 }

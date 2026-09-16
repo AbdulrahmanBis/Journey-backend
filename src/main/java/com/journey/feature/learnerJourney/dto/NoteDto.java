@@ -1,6 +1,6 @@
 package com.journey.feature.learnerJourney.dto;
 
-import com.journey.common.enums.UserRole;
+import com.journey.common.dto.EnumValueDto;
 
 import java.time.LocalDateTime;
 
@@ -8,7 +8,7 @@ public record NoteDto(
         String id,
         String actorId,
         String actorName,
-        String actorRole,
+        EnumValueDto actorRole,
         String message,
         LocalDateTime timestamp
 ) {}

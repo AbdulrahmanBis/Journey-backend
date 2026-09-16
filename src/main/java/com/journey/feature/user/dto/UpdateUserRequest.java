@@ -1,13 +1,13 @@
 package com.journey.feature.user.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.journey.common.enums.UserRole;
 
+/** {@code role} is the UserRole code (1001-1004), or null to leave unchanged. */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record UpdateUserRequest(
         String name,
         String email,
         String password,
-        UserRole role,
+        Integer role,
         String seniorId
 ) {}

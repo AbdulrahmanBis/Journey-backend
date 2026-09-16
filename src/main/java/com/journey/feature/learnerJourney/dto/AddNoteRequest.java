@@ -1,11 +1,11 @@
 package com.journey.feature.learnerJourney.dto;
 
-import com.journey.common.enums.UserRole;
 import jakarta.validation.constraints.NotBlank;
 
+/** {@code actorRole} is the UserRole code (1001-1004). */
 public record AddNoteRequest(
         @NotBlank String message,
         String actorId,
         String actorName,
-        String actorRole
+        Integer actorRole
 ) {}

@@ -1,7 +1,7 @@
 package com.journey.feature.dashboard.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.journey.common.enums.UserRole;
+import com.journey.common.dto.EnumValueDto;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,7 +11,7 @@ public record SeniorSummaryDto(
         String id,
         String name,
         String email,
-        UserRole role,
+        EnumValueDto role,
         LocalDateTime createdAt,
         List<LearnerSummaryDto> learners
 ) {}

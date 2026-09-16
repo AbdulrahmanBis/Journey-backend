@@ -1,6 +1,7 @@
 package com.journey.feature.user.service;
 
 import com.journey.common.enums.UserRole;
+import com.journey.common.service.IdGeneratorService;
 import com.journey.feature.user.dto.CreateUserRequest;
 import com.journey.feature.user.dto.UpdateUserRequest;
 import com.journey.feature.user.dto.UserDto;
@@ -20,6 +21,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final IdGeneratorService idGenerator;
 
     // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -51,17 +53,19 @@ public class UserService {
     }
 
     // ─── Mutations ────────────────────────────────────────────────────────────
-        //TODO: fix user role
+
     public UserDto createUser(CreateUserRequest req) {
         if (userRepository.existsByEmail(req.email())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists.");
         }
+        UserRole role = resolveRole(req.role());
         User user = User.builder()
+                .id(idGenerator.next(IdGeneratorService.USER, "u-"))
                 .name(req.name())
                 .email(req.email())
                 .password(passwordEncoder.encode(req.password()))
-                .role(req.role().getCode())
-                .seniorId(req.role() == UserRole.LEARNER ? req.seniorId() : null)
+                .role(role.getCode())
+                .seniorId(role == UserRole.LEARNER ? req.seniorId() : null)
                 .build();
         return toDto(userRepository.save(user));
     }
@@ -71,7 +75,7 @@ public class UserService {
         if (req.name() != null) user.setName(req.name());
         if (req.email() != null) user.setEmail(req.email());
         if (req.password() != null) user.setPassword(passwordEncoder.encode(req.password()));
-        if (req.role() != null) user.setRole(req.role().getCode());
+        if (req.role() != null) user.setRole(resolveRole(req.role()).getCode());
         if (req.seniorId() != null) user.setSeniorId(req.seniorId());
         return toDto(userRepository.save(user));
     }
@@ -84,9 +88,17 @@ public class UserService {
     // ─── Mapper ───────────────────────────────────────────────────────────────
 
     public UserDto toDto(User u) {
+        return new UserDto(u.getId(), u.getName(), u.getEmail(),
+                UserRole.fromCode(u.getRole()).toDto(), u.getSeniorId(), u.getCreatedAt());
+    }
 
-
-        return new UserDto(u.getId(), u.getName(), u.getEmail(),UserRole.fromCode(u.getRole()).getEnglish(), u.getSeniorId(), u.getCreatedAt());
+    /** Turns an inbound role code into the enum, answering with 400 rather than 500 when it's bogus. */
+    private UserRole resolveRole(Integer code) {
+        try {
+            return UserRole.fromCode(code);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role code: " + code);
+        }
     }
 
     private User findOrThrow(String id) {

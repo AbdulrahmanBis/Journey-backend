@@ -1,7 +1,6 @@
 package com.journey.feature.user.entity;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.UuidGenerator;
 
 import java.time.LocalDateTime;
 
@@ -14,7 +13,6 @@ import java.time.LocalDateTime;
 public class User {
 
     @Id
-    @UuidGenerator
     @Column(length = 36)
     private String id;
 
@@ -31,7 +29,7 @@ public class User {
     private Integer role;
 
     /** Set for learners only — references another User's id. */
-    @Column(name = "senior_id")
+    @Column(name = "senior_id", length = 36)
     private String seniorId;
 
     @Column(name = "created_at")

@@ -1,10 +1,10 @@
 package com.journey.feature.learnerJourney.dto;
 
-import com.journey.common.enums.ItemStatus;
 import jakarta.validation.constraints.NotNull;
 
+/** {@code status} is the ItemStatus code (1001-1005). */
 public record UpdateItemStatusRequest(
-        @NotNull String status,
+        @NotNull Integer status,
         Double timeSpentHours,  // required when status = COMPLETED
         String actorId
 ) {}

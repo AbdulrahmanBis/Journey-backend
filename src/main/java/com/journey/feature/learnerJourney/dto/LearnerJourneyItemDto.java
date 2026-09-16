@@ -1,7 +1,7 @@
 package com.journey.feature.learnerJourney.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.journey.common.enums.ItemStatus;
+import com.journey.common.dto.EnumValueDto;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,7 +11,7 @@ public record LearnerJourneyItemDto(
         String id,
         String learnerJourneyId,
         String journeyItemId,
-        String status,
+        EnumValueDto status,
         Double timeSpentHours,
         LocalDateTime updatedAt,
         List<NoteDto> notes
