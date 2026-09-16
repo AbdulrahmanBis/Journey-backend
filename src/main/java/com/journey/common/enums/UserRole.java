@@ -9,7 +9,13 @@ public enum UserRole{
     ADMIN(1001, "Admin", "مدير النظام"),
     MANAGER(1002, "Manager", "مدير"),
     SENIOR(1003, "Senior", "خبير"),
-    LEARNER(1004, "Learner", "متعلم");
+    LEARNER(1004, "Learner", "متعلم"),
+    /**
+     * Human resources. Sees and manages people across every department — the reach the Manager
+     * role used to have — while Manager is now limited to its own department. Added after the
+     * others, so it takes the next code rather than renumbering anyone.
+     */
+    HR(1005, "HR", "الموارد البشرية");
 
 
     private final int code;

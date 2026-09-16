@@ -1,0 +1,4 @@
+{
+  "title": "${learnerName} enrolled in ${title}",
+  "body": "Enrolled from the catalog (${typeEn}). You will review their progress."
+}

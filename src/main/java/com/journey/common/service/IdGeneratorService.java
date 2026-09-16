@@ -38,6 +38,9 @@ public class IdGeneratorService {
     public static final String EXAM_QUESTION = "exam_questions";
     public static final String EXAM_ATTEMPT = "exam_attempts";
     public static final String NOTIFICATION = "notifications";
+    public static final String DEPARTMENT = "departments";
+    public static final String PACKAGE = "packages";
+    public static final String PACKAGE_ASSIGNMENT = "package_assignments";
 
     /**
      * @param table  physical table name — must be one of the constants above (never user input;
@@ -63,7 +66,7 @@ public class IdGeneratorService {
         switch (table) {
             case USER, JOURNEY, JOURNEY_ITEM, JOURNEY_ITEM_ATTACHMENT, LEARNER_JOURNEY,
                  LEARNER_JOURNEY_ITEM, NOTE, EXAM, EXAM_QUESTION, EXAM_ATTEMPT,
-                 NOTIFICATION -> { /* ok */ }
+                 NOTIFICATION, DEPARTMENT, PACKAGE, PACKAGE_ASSIGNMENT -> { /* ok */ }
             default -> throw new IllegalArgumentException("Unknown table for id generation: " + table);
         }
     }

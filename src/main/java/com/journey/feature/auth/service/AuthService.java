@@ -5,11 +5,10 @@ import com.journey.config.JwtUtil;
 import com.journey.feature.auth.dto.AuthResponse;
 import com.journey.feature.auth.dto.LoginRequest;
 import com.journey.feature.auth.dto.SignupRequest;
-import com.journey.feature.user.dto.CreateUserRequest;
-import com.journey.feature.user.dto.UserDto;
 import com.journey.feature.user.entity.User;
 import com.journey.feature.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,6 +21,18 @@ public class AuthService {
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+
+    /**
+     * Self-service signup. Off by default: every account now needs a department, and a stranger
+     * picking their own department would decide which manager can see them. Accounts are created by
+     * HR, a Manager or an Admin instead — and once Entra ID sign-in arrives, by the directory.
+     */
+    @Value("${app.auth.self-signup-enabled:false}")
+    private boolean selfSignupEnabled;
+
+    /** The department a self-service learner joins, when signup is enabled. */
+    @Value("${app.auth.self-signup-department-id:}")
+    private String selfSignupDepartmentId;
 
     public AuthResponse login(LoginRequest req) {
         User user;
@@ -40,12 +51,15 @@ public class AuthService {
         return new AuthResponse(userService.toDto(user), token);
     }
 
-    /** Self-service signup always creates a Learner account. */
+    /** Self-service signup always creates a Learner account, when it is enabled at all. */
     public AuthResponse signup(SignupRequest req) {
-        UserDto created = userService.createUser(new CreateUserRequest(
-                req.name(), req.email(), req.password(), UserRole.LEARNER.getCode(), null
-        ));
-        String token = jwtUtil.generateToken(created.id(), UserRole.LEARNER.getEnglish());
-        return new AuthResponse(created, token);
+        if (!selfSignupEnabled) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Self-service signup is disabled. Ask HR or your manager for an account.");
+        }
+        User created = userService.createSelfServiceLearner(
+                req.name(), req.email(), req.password(), selfSignupDepartmentId);
+        String token = jwtUtil.generateToken(created.getId(), UserRole.LEARNER.getEnglish());
+        return new AuthResponse(userService.toDto(created), token);
     }
 }

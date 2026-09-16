@@ -1,0 +1,4 @@
+{
+  "title": "تم إسناد حزمة جديدة",
+  "body": "أسند إليك ${assignerName} حزمة ${packageTitle} (عدد الرحلات: ${journeyCount}). يمكنك إكمالها بأي ترتيب."
+}

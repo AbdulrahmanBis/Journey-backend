@@ -13,6 +13,8 @@ public interface JourneyItemRepository extends JpaRepository<JourneyItem, String
 
     List<JourneyItem> findByJourneyIdOrderByOrder(String journeyId);
 
+    long countByJourneyId(String journeyId);
+
     @Modifying
     @Transactional
     void deleteByJourneyId(String journeyId);

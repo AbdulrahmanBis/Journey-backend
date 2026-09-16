@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>أسند إليك ${assignerName} حزمة ${packageTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>أسند إليك <strong>${assignerName}</strong> حزمة <strong>${packageTitle}</strong>،
+         وتضم ${journeyCount} رحلات.</p>
+      <p>تجدها جميعًا في <a href="${appUrl}${link}">لوحة التحكم</a>. يمكنك إكمالها بأي ترتيب،
+         وعند إنهاء رحلة يرشدك سجل الرحلة إلى التالية.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

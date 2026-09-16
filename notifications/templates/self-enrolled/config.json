@@ -1,0 +1,17 @@
+{
+  "channels": [
+    "IN_APP",
+    "MAIL"
+  ],
+  "recipients": [
+    "reviewer"
+  ],
+  "link": "${targetPath}",
+  "variables": [
+    "learnerName",
+    "title",
+    "typeEn",
+    "typeAr",
+    "targetPath"
+  ]
+}

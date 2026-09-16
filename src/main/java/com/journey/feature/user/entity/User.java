@@ -28,6 +28,10 @@ public class User {
     @Column(nullable = false)
     private Integer role;
 
+    /** Every person belongs to exactly one department. It decides who a Manager can see. */
+    @Column(name = "department_id", nullable = false, length = 36)
+    private String departmentId;
+
     /**
      * Language the person chose in the UI ("en" / "ar"), used for email. Null until they switch
      * language at least once, in which case notifications fall back to the configured default.

@@ -37,6 +37,14 @@ public class LearnerJourney {
     @Builder.Default
     private LocalDateTime assignedAt = LocalDateTime.now();
 
+    /**
+     * The learner enrolled from the catalog. assignedBy then holds their reviewer (senior, or a
+     * manager of their department), so reviews and notifications still reach a person.
+     */
+    @Column(name = "self_enrolled", nullable = false)
+    @Builder.Default
+    private Boolean selfEnrolled = false;
+
 
     @Column(nullable = false, length = 20)
     private Integer status;

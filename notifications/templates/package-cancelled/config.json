@@ -1,0 +1,14 @@
+{
+  "channels": [
+    "IN_APP",
+    "MAIL"
+  ],
+  "recipients": [
+    "learner"
+  ],
+  "link": "/dashboard",
+  "variables": [
+    "packageTitle",
+    "packageAssignmentId"
+  ]
+}

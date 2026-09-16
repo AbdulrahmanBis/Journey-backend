@@ -11,6 +11,7 @@ import com.journey.feature.learnerJourney.service.LearnerJourneyService;
 import com.journey.feature.metrics.dto.*;
 import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
+import com.journey.common.security.AccessPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,13 +30,13 @@ public class MetricsService {
     private final UserRepository userRepository;
     private final LearnerJourneyRepository learnerJourneyRepository;
     private final LearnerJourneyService learnerJourneyService;
+    private final AccessPolicy access;
 
     // ─── Public API ───────────────────────────────────────────────────────────
 
     /** GET /api/metrics/learner/:id */
     public LearnerMetricsDto getLearnerMetrics(String learnerId) {
-        User learner = userRepository.findById(learnerId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        User learner = access.requireViewable(learnerId);
 
         List<LearnerJourneyViewDto> views = getViewsForLearner(learnerId);
         return buildLearnerMetrics(learnerId, learner.getName(), views);
@@ -43,18 +44,26 @@ public class MetricsService {
 
     /** GET /api/metrics/senior/:id */
     public GroupMetricsDto getSeniorMetrics(String seniorId) {
+        access.requireRole(AccessPolicy.STAFF);
+        User senior = access.requireViewable(seniorId);
+        if (!AccessPolicy.hasRole(senior, UserRole.SENIOR)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, senior.getName() + " is not a Senior.");
+        }
         List<User> learners = userRepository.findByRoleAndSeniorId(UserRole.LEARNER.getCode(), seniorId);
         return buildGroupMetrics(learners);
     }
 
     /** GET /api/metrics/org */
-    public OrgMetricsDto getOrgMetrics() {
-        List<User> seniors = userRepository.findByRole(UserRole.SENIOR.getCode());
-        if (seniors.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No seniors found.");
-        }
+    public OrgMetricsDto getOrgMetrics(String departmentId) {
+        String scope = access.departmentScope(departmentId);
+        // An empty department is a valid view — it reports zeros rather than an error.
+        List<User> seniors = scope == null
+                ? userRepository.findByRole(UserRole.SENIOR.getCode())
+                : userRepository.findByRoleAndDepartmentId(UserRole.SENIOR.getCode(), scope);
 
-        List<User> allLearners = userRepository.findByRole(UserRole.LEARNER.getCode());
+        List<User> allLearners = scope == null
+                ? userRepository.findByRole(UserRole.LEARNER.getCode())
+                : userRepository.findByRoleAndDepartmentId(UserRole.LEARNER.getCode(), scope);
         List<LearnerJourneyViewDto> allViews = allLearners.stream()
                 .flatMap(l -> getViewsForLearner(l.getId()).stream())
                 .toList();

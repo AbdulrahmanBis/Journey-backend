@@ -38,7 +38,7 @@ public class MetricsController {
      * Full org view — all seniors → all learners — mirrors JS /api/metrics when role=manager|admin.
      */
     @GetMapping("/org")
-    public ResponseEntity<OrgMetricsDto> getOrgMetrics() {
-        return ResponseEntity.ok(metricsService.getOrgMetrics());
+    public ResponseEntity<OrgMetricsDto> getOrgMetrics(@RequestParam(required = false) String departmentId) {
+        return ResponseEntity.ok(metricsService.getOrgMetrics(departmentId));
     }
 }

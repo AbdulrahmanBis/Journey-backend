@@ -3,12 +3,18 @@ package com.journey.feature.exam.service;
 
 import com.journey.common.enums.ExamAttemptStatus;
 import com.journey.common.enums.ExamQuestionType;
+import com.journey.common.enums.UserRole;
+import com.journey.common.security.AccessPolicy;
 import com.journey.common.service.IdGeneratorService;
 import com.journey.feature.exam.event.ExamGradedEvent;
 import com.journey.feature.exam.event.ExamSubmittedEvent;
 import com.journey.feature.exam.dto.*;
 import com.journey.feature.exam.entity.*;
 import com.journey.feature.exam.repository.*;
+import com.journey.feature.learnerJourney.entity.LearnerJourney;
+import com.journey.feature.learnerJourney.repository.LearnerJourneyRepository;
+import com.journey.feature.user.entity.User;
+import com.journey.feature.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -35,6 +41,10 @@ public class ExamService {
     private final ExamAttemptRepository examAttemptRepository;
     private final IdGeneratorService idGenerator;
     private final ApplicationEventPublisher events;
+    // Repositories rather than LearnerJourneyService, which already depends on this service.
+    private final LearnerJourneyRepository learnerJourneyRepository;
+    private final UserRepository userRepository;
+    private final AccessPolicy access;
 
     /** Option choices are 1001-based codes, matching every other enum-ish value in the system. */
     public static final int OPTION_CODE_BASE = 1001;
@@ -76,6 +86,7 @@ public class ExamService {
      */
     @Transactional
     public ExamDto saveExam(String journeyId, SaveExamRequest req) {
+        User author = access.requireRole(AccessPolicy.STAFF);
 
         Exam exam = examRepository.findByJourneyId(journeyId).orElse(null);
 
@@ -85,8 +96,8 @@ public class ExamService {
                     .journeyId(journeyId)
                     .title(req.title())
                     .passingScorePercent(req.passingScorePercent())
-                    .createdById(req.createdById())
-                    .createdByName(req.createdByName())
+                    .createdById(author.getId())
+                    .createdByName(author.getName())
                     .updatedAt(LocalDateTime.now())
                     .build();
         } else {
@@ -152,6 +163,7 @@ public class ExamService {
 
     @Transactional
     public void deleteExam(String journeyId) {
+        access.requireRole(AccessPolicy.STAFF);
 
         Exam exam = examRepository.findByJourneyId(journeyId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -184,6 +196,14 @@ public class ExamService {
     }
 
 
+    /** GET for the API: the attempt, provided the caller can see this learner. */
+    @Transactional
+    public ExamAttemptDto getAttemptForCaller(String learnerJourneyId) {
+        access.requireViewable(learnerOf(learnerJourneyId).getId());
+        return getAttempt(learnerJourneyId);
+    }
+
+    /** Internal: no access check — callers such as the journey view have already done theirs. */
     @Transactional
     public ExamAttemptDto getAttempt(String learnerJourneyId) {
 
@@ -219,6 +239,11 @@ public class ExamService {
     @Transactional
     public ExamAttemptDto submitAttempt(String learnerJourneyId,
                                         SubmitAttemptRequest req) {
+
+        // Only the learner sits their own exam.
+        if (!learnerOf(learnerJourneyId).getId().equals(access.actor().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the learner can submit this exam.");
+        }
 
         Exam exam = examRepository.findById(req.examId())
                 .orElseThrow(() ->
@@ -299,6 +324,12 @@ public class ExamService {
                 .orElseThrow(() ->
                         new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found."));
 
+        // A reviewer who can see the learner — never the learner grading themselves.
+        User grader = access.actor();
+        if (!access.isReviewerOf(grader, learnerOf(attempt.getLearnerJourneyId()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot grade this exam.");
+        }
+
         List<ExamAnswer> answers =
                 examAnswerRepository.findByAttemptId(attemptId);
 
@@ -340,8 +371,8 @@ public class ExamService {
 
         attempt.setStatus(ExamAttemptStatus.GRADED.getCode());
         attempt.setGradedAt(LocalDateTime.now());
-        attempt.setGradedById(req.gradedById());
-        attempt.setGradedByName(req.gradedByName());
+        attempt.setGradedById(grader.getId());
+        attempt.setGradedByName(grader.getName());
         attempt.setScorePercent(score);
         attempt.setPassed(req.passed());
 
@@ -355,6 +386,14 @@ public class ExamService {
                 attempt.getGradedByName()));
 
         return getAttempt(attempt.getLearnerJourneyId());
+    }
+
+    /** The learner a learner-journey belongs to. */
+    private User learnerOf(String learnerJourneyId) {
+        LearnerJourney lj = learnerJourneyRepository.findById(learnerJourneyId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Learner journey not found."));
+        return userRepository.findById(lj.getLearnerId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Learner not found."));
     }
 
     private ExamAnswerDto toAnswerDto(ExamAnswer answer) {

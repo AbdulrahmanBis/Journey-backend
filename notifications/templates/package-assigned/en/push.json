@@ -1,0 +1,4 @@
+{
+  "title": "New package assigned",
+  "body": "${assignerName} assigned you ${packageTitle} (${journeyCount} journeys). Take them in any order."
+}

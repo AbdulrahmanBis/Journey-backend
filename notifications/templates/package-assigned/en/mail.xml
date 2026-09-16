@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${assignerName} assigned you the ${packageTitle} package</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${assignerName}</strong> has assigned you the package
+       <strong>${packageTitle}</strong>, a set of ${journeyCount} journeys.</p>
+    <p>They all appear on <a href="${appUrl}${link}">your dashboard</a>. You can take them in any
+       order; when you finish one, the journey log points you to the next.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

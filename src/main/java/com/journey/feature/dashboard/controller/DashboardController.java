@@ -31,7 +31,8 @@ public class DashboardController {
      * Returns all seniors → learners → journeys tree.
      */
     @GetMapping("/manager")
-    public ResponseEntity<List<SeniorSummaryDto>> getManagerOverview() {
-        return ResponseEntity.ok(dashboardService.getManagerOverview());
+    public ResponseEntity<List<SeniorSummaryDto>> getManagerOverview(
+            @RequestParam(required = false) String departmentId) {
+        return ResponseEntity.ok(dashboardService.getManagerOverview(departmentId));
     }
 }

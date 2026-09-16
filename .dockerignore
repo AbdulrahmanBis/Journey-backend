@@ -1,0 +1,9 @@
+target/
+storage/
+.idea/
+.vscode/
+*.iml
+.git/
+.mvn/wrapper/maven-wrapper.jar
+HELP.md
+scripts/

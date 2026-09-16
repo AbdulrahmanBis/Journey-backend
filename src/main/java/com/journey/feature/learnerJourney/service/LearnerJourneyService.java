@@ -2,6 +2,7 @@ package com.journey.feature.learnerJourney.service;
 
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.UserRole;
+import com.journey.common.security.AccessPolicy;
 import com.journey.common.service.IdGeneratorService;
 import com.journey.feature.exam.dto.ExamAttemptDto;
 import com.journey.feature.exam.dto.ExamDto;
@@ -22,6 +23,8 @@ import com.journey.feature.learnerJourney.event.NoteAddedEvent;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyItemRepository;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyRepository;
 import com.journey.feature.learnerJourney.repository.NoteRepository;
+import com.journey.feature.user.entity.User;
+import com.journey.feature.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -31,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -43,11 +47,18 @@ public class LearnerJourneyService {
     private final ExamService examService;
     private final IdGeneratorService idGenerator;
     private final ApplicationEventPublisher events;
+    private final AccessPolicy access;
+    private final UserRepository userRepository;
 
     // ─── Queries ──────────────────────────────────────────────────────────────
+    //
+    // Access: whoever can see the learner (themselves, their senior, their department's manager,
+    // HR, Admin) can see their journeys. Mutations narrow that further — see each method.
+    // Who performed an action is always the signed-in caller, never a value from the request body.
 
     /** GET /api/learner-journeys?learnerId=x */
     public List<LearnerJourneyViewDto> getLearnerJourneyViews(String learnerId) {
+        access.requireViewable(learnerId);
         return learnerJourneyRepository.findByLearnerId(learnerId).stream()
                 .map(this::buildView)
                 .toList();
@@ -56,6 +67,7 @@ public class LearnerJourneyService {
     /** GET /api/learner-journeys/:id — the fully composed quest-log view. */
     public LearnerJourneyViewDto getLearnerJourneyView(String id) {
         LearnerJourney lj = findLjOrThrow(id);
+        access.requireViewable(lj.getLearnerId());
         return buildView(lj);
     }
 
@@ -64,35 +76,27 @@ public class LearnerJourneyService {
     /**
      * POST /api/learner-journeys
      * Assign a journey template to a learner and auto-create a LearnerJourneyItem row for each item.
+     *
+     * <p>Staff only, and only to a learner the caller can see: a Senior their own learners, a Manager
+     * their department's, HR and Admin anyone's.
      */
     @Transactional
     public LearnerJourneyViewDto assignJourney(AssignJourneyRequest req) {
-        if (learnerJourneyRepository.existsByJourneyIdAndLearnerId(req.journeyId(), req.learnerId())) {
+        User actor = access.requireRole(AccessPolicy.STAFF);
+        User learner = access.requireViewable(req.learnerId());
+        if (!AccessPolicy.hasRole(learner, UserRole.LEARNER)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    learner.getName() + " is not a Learner.");
+        }
+        journeyService.getEntityById(req.journeyId()); // 404 for an unknown journey, before any writes
+
+        // A cancelled assignment doesn't count: the journey can be given again, starting fresh.
+        if (findActiveAssignment(req.journeyId(), req.learnerId()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This learner is already assigned to that journey.");
         }
 
-        LearnerJourney lj = LearnerJourney.builder()
-                .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY, "lj-"))
-                .journeyId(req.journeyId())
-                .learnerId(req.learnerId())
-                .assignedById(req.assignedById())
-                .assignedByName(req.assignedByName())
-                .status(ItemStatus.NEW.getCode())
-                .build();
-        LearnerJourney saved = learnerJourneyRepository.save(lj);
-
-        // Auto-create one LearnerJourneyItem per template item — status NEW
-        List<JourneyItem> templateItems = journeyService.getItemEntitiesForJourney(req.journeyId());
-        templateItems.forEach(item -> {
-            LearnerJourneyItem lji = LearnerJourneyItem.builder()
-                    .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY_ITEM, "lji-"))
-                    .learnerJourneyId(saved.getId())
-                    .journeyItemId(item.getId())
-                    .status(ItemStatus.NEW.getCode())
-                    .build();
-            learnerJourneyItemRepository.save(lji);
-        });
+        LearnerJourney saved = createAssignment(req.journeyId(), learner, actor);
 
         /*
           Announced through an event rather than by calling the notifier directly, so this service
@@ -110,10 +114,79 @@ public class LearnerJourneyService {
         return buildView(saved);
     }
 
-    /** PATCH /api/learner-journeys/:id/status */
+    /**
+     * The learner's live (not cancelled) assignment of a journey, if any.
+     */
+    public Optional<LearnerJourney> findActiveAssignment(String journeyId, String learnerId) {
+        return learnerJourneyRepository.findFirstByJourneyIdAndLearnerIdAndStatusNot(
+                journeyId, learnerId, ItemStatus.CANCELLED.getCode());
+    }
+
+    /**
+     * Creates the assignment and one NEW progress row per template item. No access checks and no
+     * event: callers (a single assignment above, or a package) have already checked, and announce
+     * it their own way — a package sends one notification, not one per journey.
+     */
+    @Transactional
+    public LearnerJourney createAssignment(String journeyId, User learner, User actor) {
+        return createAssignment(journeyId, learner, actor, false);
+    }
+
+    /**
+     * @param assigner     who is recorded as assigning it; for a self-enrollment, the reviewer
+     * @param selfEnrolled the learner enrolled from the catalog
+     */
+    @Transactional
+    public LearnerJourney createAssignment(String journeyId, User learner, User assigner, boolean selfEnrolled) {
+        LearnerJourney saved = learnerJourneyRepository.save(LearnerJourney.builder()
+                .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY, "lj-"))
+                .journeyId(journeyId)
+                .learnerId(learner.getId())
+                .assignedById(assigner.getId())
+                .assignedByName(assigner.getName())
+                .selfEnrolled(selfEnrolled)
+                .status(ItemStatus.NEW.getCode())
+                .build());
+
+        journeyService.getItemEntitiesForJourney(journeyId).forEach(item ->
+                learnerJourneyItemRepository.save(LearnerJourneyItem.builder()
+                        .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY_ITEM, "lji-"))
+                        .learnerJourneyId(saved.getId())
+                        .journeyItemId(item.getId())
+                        .status(ItemStatus.NEW.getCode())
+                        .build()));
+        return saved;
+    }
+
+    /** Cancels without an event, for callers that announce the cancellation themselves. */
+    @Transactional
+    public void cancelQuietly(String learnerJourneyId) {
+        LearnerJourney lj = findLjOrThrow(learnerJourneyId);
+        lj.setStatus(ItemStatus.CANCELLED.getCode());
+        learnerJourneyRepository.save(lj);
+    }
+
+    /** Share of completed items, 0–100 — without composing the whole view. */
+    public int percentComplete(String learnerJourneyId) {
+        List<LearnerJourneyItem> items = learnerJourneyItemRepository.findByLearnerJourneyId(learnerJourneyId);
+        if (items.isEmpty()) return 0;
+        long done = items.stream().filter(i -> i.getStatus() == ItemStatus.COMPLETED.getCode()).count();
+        return (int) Math.round((double) done / items.size() * 100);
+    }
+
+    public LearnerJourney getEntity(String learnerJourneyId) {
+        return findLjOrThrow(learnerJourneyId);
+    }
+
+    /**
+     * PATCH /api/learner-journeys/:id/status — overriding a whole journey's status (cancelling it,
+     * forcing it complete) is a management decision: Manager, HR or Admin, within their reach.
+     */
     @Transactional
     public LearnerJourneyViewDto updateJourneyStatus(String id, UpdateJourneyStatusRequest req) {
+        access.requireRole(UserRole.MANAGER, UserRole.HR, UserRole.ADMIN);
         LearnerJourney lj = findLjOrThrow(id);
+        access.requireViewable(lj.getLearnerId());
         ItemStatus status = resolveStatus(req.status());
         boolean wasCancelled = lj.getStatus() == ItemStatus.CANCELLED.getCode();
 
@@ -132,10 +205,18 @@ public class LearnerJourneyService {
         return buildView(lj);
     }
 
-    /** PATCH /api/learner-journey-items/:itemId/status */
+    /**
+     * PATCH /api/learner-journey-items/:itemId/status — the learner working through their own journey,
+     * or a reviewer who can see them moving it on their behalf.
+     */
     @Transactional
     public LearnerJourneyItemDto updateItemStatus(String itemId, UpdateItemStatusRequest req) {
         LearnerJourneyItem item = findLjiOrThrow(itemId);
+        User actor = access.actor();
+        User learner = learnerOf(item);
+        if (!actor.getId().equals(learner.getId()) && !access.isReviewerOf(actor, learner)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot change this learner's progress.");
+        }
         ItemStatus status = resolveStatus(req.status());
 
         if (status == ItemStatus.COMPLETED
@@ -169,30 +250,29 @@ public class LearnerJourneyService {
                 status.getEnglish(),
                 status.getArabic(),
                 parent.getLearnerId(),
-                req.actorId()));
+                actor.getId()));
 
         return toItemDto(saved);
     }
 
-    /** POST /api/learner-journey-items/:itemId/notes */
+    /**
+     * POST /api/learner-journey-items/:itemId/notes — anyone who can see the learner can join the
+     * conversation. The author is the signed-in caller; the request body's actor fields are ignored,
+     * otherwise anyone could post a note in someone else's name.
+     */
     @Transactional
     public NoteDto addNote(String itemId, AddNoteRequest req) {
         LearnerJourneyItem lji = findLjiOrThrow(itemId);
-
-        UserRole actorRole;
-        try {
-            actorRole = UserRole.fromCode(req.actorRole());
-        } catch (IllegalArgumentException | NullPointerException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unknown actorRole code: " + req.actorRole());
-        }
+        User actor = access.actor();
+        access.requireViewable(learnerOf(lji).getId());
+        UserRole actorRole = AccessPolicy.roleOf(actor);
 
         Note note = Note.builder()
                 .id(idGenerator.next(IdGeneratorService.NOTE, "n-"))
                 .learnerJourneyItemId(itemId)
                 .message(req.message())
-                .actorId(req.actorId())
-                .actorName(req.actorName())
+                .actorId(actor.getId())
+                .actorName(actor.getName())
                 .actorRole(actorRole.getCode())
                 .build();
 
@@ -203,8 +283,8 @@ public class LearnerJourneyService {
                 parent.getId(),
                 journeyTitleOf(parent),
                 itemTitleOf(parent, lji.getJourneyItemId()),
-                req.actorId(),
-                req.actorName(),
+                actor.getId(),
+                actor.getName(),
                 actorRole == UserRole.LEARNER,
                 parent.getLearnerId(),
                 parent.getAssignedById()));
@@ -270,6 +350,7 @@ public class LearnerJourneyService {
         return new LearnerJourneyViewDto(
                 lj.getId(), lj.getJourneyId(), lj.getLearnerId(),
                 lj.getAssignedById(), lj.getAssignedByName(), lj.getAssignedAt(),
+                Boolean.TRUE.equals(lj.getSelfEnrolled()),
                 ItemStatus.fromCode(lj.getStatus()).toDto(), lj.getStartedAt(), lj.getCompletedAt(),
                 journeyService.toDto(journey),
                 itemViews,
@@ -359,6 +440,13 @@ public class LearnerJourneyService {
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown status code: " + code);
         }
+    }
+
+    /** The learner whose journey this item belongs to. */
+    private User learnerOf(LearnerJourneyItem item) {
+        String learnerId = findLjOrThrow(item.getLearnerJourneyId()).getLearnerId();
+        return userRepository.findById(learnerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Learner not found."));
     }
 
     private LearnerJourney findLjOrThrow(String id) {

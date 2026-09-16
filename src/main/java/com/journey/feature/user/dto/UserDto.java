@@ -2,6 +2,7 @@ package com.journey.feature.user.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.journey.common.dto.EnumValueDto;
+import com.journey.feature.department.dto.DepartmentDto;
 
 import java.time.LocalDateTime;
 
@@ -11,6 +12,8 @@ public record UserDto(
         String name,
         String email,
         EnumValueDto role,
+        /** Every person has one. {@code memberCount} is left out here — it describes the department, not the person. */
+        DepartmentDto department,
         String seniorId,
         LocalDateTime createdAt
 ) {}

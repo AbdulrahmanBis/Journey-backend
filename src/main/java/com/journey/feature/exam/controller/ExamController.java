@@ -51,7 +51,7 @@ public class ExamController {
     @GetMapping("/api/learner-journeys/{learnerJourneyId}/exam-attempt")
     public ResponseEntity<ExamAttemptDto> getAttempt(
             @PathVariable String learnerJourneyId) {
-        return ResponseEntity.ok(service.getAttempt(learnerJourneyId));
+        return ResponseEntity.ok(service.getAttemptForCaller(learnerJourneyId));
     }
 
     /** POST /api/learner-journeys/:learnerJourneyId/exam-attempt */

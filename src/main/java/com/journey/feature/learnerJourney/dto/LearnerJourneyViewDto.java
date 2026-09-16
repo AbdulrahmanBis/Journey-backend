@@ -18,6 +18,8 @@ public record LearnerJourneyViewDto(
         String assignedById,
         String assignedByName,
         LocalDateTime assignedAt,
+        /** Enrolled from the catalog; assignedBy is then the reviewer. */
+        boolean selfEnrolled,
         EnumValueDto status,
         LocalDateTime startedAt,
         LocalDateTime completedAt,

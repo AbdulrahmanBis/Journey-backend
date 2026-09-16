@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${learnerName} enrolled in ${title}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${learnerName}</strong> enrolled themselves in the ${typeEn} <strong>${title}</strong> from the catalog.</p>
+    <p>You are their reviewer, so their notes, completions and exams will come to you.
+       <a href="${appUrl}${link}">Open it</a>.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

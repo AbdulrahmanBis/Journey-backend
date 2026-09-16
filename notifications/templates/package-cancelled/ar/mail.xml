@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>تم إلغاء حزمة ${packageTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>تم إلغاء حزمة <strong>${packageTitle}</strong>، ولم تعد رحلاتها غير المكتملة مطلوبة منك.
+         يبقى كل ما أكملته ظاهرًا في <a href="${appUrl}${link}">لوحة التحكم</a>.</p>
+      <p>إذا كان هذا غير متوقع، تواصل مع مشرفك.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

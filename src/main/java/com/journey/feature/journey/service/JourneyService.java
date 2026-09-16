@@ -1,6 +1,8 @@
 package com.journey.feature.journey.service;
 
 import com.journey.common.enums.AttachmentKind;
+import com.journey.common.security.AccessPolicy;
+import com.journey.feature.user.entity.User;
 import com.journey.common.service.IdGeneratorService;
 import com.journey.common.storage.StorageService;
 import com.journey.feature.journey.dto.AttachmentDto;
@@ -39,6 +41,7 @@ public class JourneyService {
     private final JourneyItemAttachmentRepository attachmentRepository;
     private final IdGeneratorService idGenerator;
     private final StorageService storage;
+    private final AccessPolicy access;
 
     // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -77,13 +80,15 @@ public class JourneyService {
 
     @Transactional
     public JourneyDto createJourney(CreateJourneyRequest req) {
+        // Journeys are company-wide; any staff role may author one. The author is the caller.
+        User author = access.requireRole(AccessPolicy.STAFF);
         Journey journey = Journey.builder()
                 .id(idGenerator.next(IdGeneratorService.JOURNEY, "j-"))
                 .title(req.title())
                 .description(req.description())
                 .techTag(req.techTag())
-                .createdById(req.createdById())
-                .createdByName(req.createdByName())
+                .createdById(author.getId())
+                .createdByName(author.getName())
                 .build();
         Journey saved = journeyRepository.save(journey);
         saveItems(saved.getId(), req.items());
@@ -92,6 +97,7 @@ public class JourneyService {
 
     @Transactional
     public JourneyDto updateJourney(String id, CreateJourneyRequest req) {
+        access.requireRole(AccessPolicy.STAFF);
         Journey journey = findOrThrow(id);
         journey.setTitle(req.title());
         journey.setDescription(req.description());
@@ -116,6 +122,7 @@ public class JourneyService {
 
     @Transactional
     public void deleteJourney(String id) {
+        access.requireRole(AccessPolicy.STAFF);
         Journey journey = findOrThrow(id);
         // The journey is going away, so no file is retained.
         clearAttachmentsFor(getItemEntitiesForJourney(id), Set.of());

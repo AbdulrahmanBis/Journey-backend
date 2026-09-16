@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>The ${packageTitle} package was cancelled</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p>The package <strong>${packageTitle}</strong> was cancelled. Its unfinished journeys are no
+       longer required; anything you already completed stays on
+       <a href="${appUrl}${link}">your dashboard</a>.</p>
+    <p>If this is unexpected, talk to your senior.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

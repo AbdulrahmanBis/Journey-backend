@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>سجّل ${learnerName} في ${title}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>سجّل <strong>${learnerName}</strong> نفسه في <strong>${title}</strong> (${typeAr}) من الفهرس.</p>
+      <p>أنت المراجع المسؤول، لذا ستصلك ملاحظاته وإنجازاته واختباراته.
+         <a href="${appUrl}${link}">افتحها</a>.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

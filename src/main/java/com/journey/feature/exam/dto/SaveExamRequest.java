@@ -13,12 +13,12 @@ public record SaveExamRequest(
         @NotNull
         Integer passingScorePercent,
 
-        @NotBlank
+        /** Ignored — the author is the signed-in caller. Kept so existing clients still deserialize. */
         String createdById,
 
-        @NotBlank
+        /** Ignored, as above. */
         String createdByName,
 
-       List<QuestionDraftDto> questions
+        List<QuestionDraftDto> questions
 ) {
 }

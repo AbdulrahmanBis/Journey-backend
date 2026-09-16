@@ -1,5 +1,6 @@
 package com.journey.feature.file.controller;
 
+import com.journey.common.security.AccessPolicy;
 import com.journey.common.storage.LocalDiskStorageService;
 import com.journey.common.storage.StorageService;
 import com.journey.common.storage.StoredFile;
@@ -33,10 +34,7 @@ import java.util.Set;
 public class FileController {
 
     private final StorageService storage;
-
-    /** Only these roles may author journeys, so only these may upload. */
-    private static final Set<String> UPLOAD_ROLES =
-            Set.of("ROLE_SENIOR", "ROLE_MANAGER", "ROLE_ADMIN");
+    private final AccessPolicy access;
 
     /** Extensions are assigned by us from an allowlisted MIME, so this reverse map is closed. */
     private static final Map<String, MediaType> MIME_BY_EXT = Map.ofEntries(
@@ -65,7 +63,8 @@ public class FileController {
     /** POST /api/files — multipart upload, returns the key to attach. */
     @PostMapping("/api/files")
     public ResponseEntity<UploadedFileDto> upload(@RequestPart("file") MultipartFile file) {
-        requireUploadRole();
+        // Only the roles that author journeys may upload; a plain learner cannot write to storage.
+        access.requireRole(AccessPolicy.STAFF);
         StoredFile stored = storage.store(file);
         return ResponseEntity.status(HttpStatus.CREATED).body(new UploadedFileDto(
                 stored.storageKey(), stored.originalName(), stored.mimeType(), stored.sizeBytes()));
@@ -168,17 +167,4 @@ public class FileController {
         return key;
     }
 
-    /**
-     * SecurityConfig only requires authentication, not a role, so the check lives here — uploads
-     * are the one place where a plain learner account could otherwise write to the filesystem.
-     */
-    private void requireUploadRole() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean allowed = auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> UPLOAD_ROLES.contains(a.getAuthority()));
-        if (!allowed) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Your role is not allowed to upload files.");
-        }
-    }
 }
