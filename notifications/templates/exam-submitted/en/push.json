@@ -1,0 +1,4 @@
+{
+  "title": "${learnerName} submitted an exam",
+  "body": "The exam for ${journeyTitle} is waiting to be graded."
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>قدّم ${learnerName} اختبار رحلة ${journeyTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>قدّم <strong>${learnerName}</strong> اختبار رحلة <strong>${journeyTitle}</strong>،
+         وهو بانتظار التصحيح.</p>
+      <p><a href="${appUrl}${link}">افتح الإجابة</a> لتصحيحها.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

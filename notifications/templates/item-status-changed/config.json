@@ -1,0 +1,6 @@
+{
+  "channels": ["IN_APP"],
+  "recipients": ["learner"],
+  "link": "/journey-log/${learnerJourneyId}",
+  "variables": ["actorName", "journeyTitle", "itemTitle", "statusEn", "statusAr", "learnerJourneyId"]
+}

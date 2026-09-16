@@ -1,0 +1,4 @@
+{
+  "title": "New journey assigned",
+  "body": "${assignerName} assigned you to ${journeyTitle}. Open it to get started."
+}

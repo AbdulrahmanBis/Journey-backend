@@ -1,0 +1,4 @@
+{
+  "title": "تم تصحيح اختبارك: ${outcomeAr}",
+  "body": "صحّح ${graderName} اختبار رحلة ${journeyTitle}. نتيجتك ${scorePercent}٪."
+}

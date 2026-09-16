@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${learnerName} finished ${journeyTitle}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${learnerName}</strong> has completed every item in
+       <strong>${journeyTitle}</strong>.</p>
+    <p><a href="${appUrl}${link}">Review the journey</a> to check their notes and logged hours,
+       and to set or mark the exam.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

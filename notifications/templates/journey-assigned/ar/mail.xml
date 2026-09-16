@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  البريد الإلكتروني لإشعار إسناد الرحلة.
+
+  غير مُفعّل بعد: ملف config.json يحتوي على IN_APP فقط. تتم تهيئته بإضافة "MAIL" إلى channels.
+  المتغيّران ${link} و ${appUrl} يُضافان تلقائيًا، وأي متغيّر آخر يجب تعريفه في config.json.
+-->
+<mail>
+  <subject>أسند إليك ${assignerName} رحلة ${journeyTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>أسند إليك <strong>${assignerName}</strong> رحلة <strong>${journeyTitle}</strong>.</p>
+      <p><a href="${appUrl}${link}">افتح الرحلة</a> للاطلاع على المطلوب والبدء بها.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

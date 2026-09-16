@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>تم تصحيح اختبار رحلة ${journeyTitle}: ${outcomeAr}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>صحّح <strong>${graderName}</strong> اختبارك في رحلة <strong>${journeyTitle}</strong>.</p>
+      <p>النتيجة: <strong>${outcomeAr}</strong> — ${scorePercent}٪.</p>
+      <p><a href="${appUrl}${link}">اطّلع على النتيجة كاملة</a>، بما في ذلك تصحيح كل إجابة.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

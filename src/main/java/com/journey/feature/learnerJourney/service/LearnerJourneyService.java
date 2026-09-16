@@ -14,11 +14,17 @@ import com.journey.feature.learnerJourney.dto.*;
 import com.journey.feature.learnerJourney.entity.LearnerJourney;
 import com.journey.feature.learnerJourney.entity.LearnerJourneyItem;
 import com.journey.feature.learnerJourney.entity.Note;
+import com.journey.feature.learnerJourney.event.ItemStatusChangedEvent;
+import com.journey.feature.learnerJourney.event.JourneyAssignedEvent;
+import com.journey.feature.learnerJourney.event.JourneyCancelledEvent;
+import com.journey.feature.learnerJourney.event.JourneyCompletedEvent;
+import com.journey.feature.learnerJourney.event.NoteAddedEvent;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyItemRepository;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyRepository;
 import com.journey.feature.learnerJourney.repository.NoteRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -36,6 +42,7 @@ public class LearnerJourneyService {
     private final JourneyService journeyService;
     private final ExamService examService;
     private final IdGeneratorService idGenerator;
+    private final ApplicationEventPublisher events;
 
     // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -87,6 +94,19 @@ public class LearnerJourneyService {
             learnerJourneyItemRepository.save(lji);
         });
 
+        /*
+          Announced through an event rather than by calling the notifier directly, so this service
+          keeps knowing nothing about notifications. The listener runs after this transaction
+          commits — a rollback here must not leave the learner told about an assignment that no
+          longer exists.
+         */
+        events.publishEvent(new JourneyAssignedEvent(
+                saved.getId(),
+                saved.getLearnerId(),
+                saved.getAssignedById(),
+                saved.getAssignedByName(),
+                journeyService.getEntityById(req.journeyId()).getTitle()));
+
         return buildView(saved);
     }
 
@@ -95,12 +115,20 @@ public class LearnerJourneyService {
     public LearnerJourneyViewDto updateJourneyStatus(String id, UpdateJourneyStatusRequest req) {
         LearnerJourney lj = findLjOrThrow(id);
         ItemStatus status = resolveStatus(req.status());
+        boolean wasCancelled = lj.getStatus() == ItemStatus.CANCELLED.getCode();
 
         lj.setStatus(status.getCode());
         if (status == ItemStatus.COMPLETED && lj.getCompletedAt() == null) {
             lj.setCompletedAt(LocalDateTime.now());
         }
         learnerJourneyRepository.save(lj);
+
+        // Only on the transition — re-cancelling an already cancelled journey is not news.
+        if (status == ItemStatus.CANCELLED && !wasCancelled) {
+            events.publishEvent(new JourneyCancelledEvent(
+                    lj.getId(), journeyTitleOf(lj), lj.getLearnerId()));
+        }
+
         return buildView(lj);
     }
 
@@ -127,13 +155,29 @@ public class LearnerJourneyService {
         // Auto-update parent LearnerJourney status based on item completions
         recomputeJourneyStatus(item.getLearnerJourneyId());
 
+        /*
+          The listener drops this when the learner moved their own item, but the check needs the
+          learner id, which only this side knows. Both labels of the status travel with the event:
+          the notification is rendered in the reader.s language, so picking one here would come out
+          wrong in the other.
+         */
+        LearnerJourney parent = findLjOrThrow(saved.getLearnerJourneyId());
+        events.publishEvent(new ItemStatusChangedEvent(
+                parent.getId(),
+                journeyTitleOf(parent),
+                itemTitleOf(parent, saved.getJourneyItemId()),
+                status.getEnglish(),
+                status.getArabic(),
+                parent.getLearnerId(),
+                req.actorId()));
+
         return toItemDto(saved);
     }
 
     /** POST /api/learner-journey-items/:itemId/notes */
     @Transactional
     public NoteDto addNote(String itemId, AddNoteRequest req) {
-        findLjiOrThrow(itemId);
+        LearnerJourneyItem lji = findLjiOrThrow(itemId);
 
         UserRole actorRole;
         try {
@@ -152,7 +196,20 @@ public class LearnerJourneyService {
                 .actorRole(actorRole.getCode())
                 .build();
 
-        return toNoteDto(noteRepository.save(note));
+        NoteDto saved = toNoteDto(noteRepository.save(note));
+
+        LearnerJourney parent = findLjOrThrow(lji.getLearnerJourneyId());
+        events.publishEvent(new NoteAddedEvent(
+                parent.getId(),
+                journeyTitleOf(parent),
+                itemTitleOf(parent, lji.getJourneyItemId()),
+                req.actorId(),
+                req.actorName(),
+                actorRole == UserRole.LEARNER,
+                parent.getLearnerId(),
+                parent.getAssignedById()));
+
+        return saved;
     }
 
     // ─── View builder ────────────────────────────────────────────────────────
@@ -242,6 +299,7 @@ public class LearnerJourneyService {
 
         boolean allCompleted = items.stream().allMatch(i -> i.getStatus() == ItemStatus.COMPLETED.getCode());
         boolean anyStarted = items.stream().anyMatch(i -> i.getStatus() != ItemStatus.NEW.getCode());
+        boolean wasCompleted = lj.getStatus() == ItemStatus.COMPLETED.getCode();
 
         if (allCompleted) {
             lj.setStatus(ItemStatus.COMPLETED.getCode());
@@ -251,6 +309,30 @@ public class LearnerJourneyService {
             if (lj.getStartedAt() == null) lj.setStartedAt(LocalDateTime.now());
         }
         learnerJourneyRepository.save(lj);
+
+        /*
+          Fires on the transition only. This method runs after every single item update, so
+          announcing whenever allCompleted holds would re-notify on each later edit of an already
+          finished journey.
+         */
+        if (allCompleted && !wasCompleted) {
+            events.publishEvent(new JourneyCompletedEvent(
+                    lj.getId(), journeyTitleOf(lj), lj.getLearnerId(), lj.getAssignedById()));
+        }
+    }
+
+    /** Title of the journey template behind a learner journey. */
+    private String journeyTitleOf(LearnerJourney lj) {
+        return journeyService.getEntityById(lj.getJourneyId()).getTitle();
+    }
+
+    /** Title of one template item, or empty if it has since been removed from the journey. */
+    private String itemTitleOf(LearnerJourney lj, String journeyItemId) {
+        return journeyService.getItemEntitiesForJourney(lj.getJourneyId()).stream()
+                .filter(item -> item.getId().equals(journeyItemId))
+                .findFirst()
+                .map(JourneyItem::getTitle)
+                .orElse("");
     }
 
     // ─── Mappers ──────────────────────────────────────────────────────────────

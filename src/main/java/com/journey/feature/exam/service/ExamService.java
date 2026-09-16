@@ -4,11 +4,14 @@ package com.journey.feature.exam.service;
 import com.journey.common.enums.ExamAttemptStatus;
 import com.journey.common.enums.ExamQuestionType;
 import com.journey.common.service.IdGeneratorService;
+import com.journey.feature.exam.event.ExamGradedEvent;
+import com.journey.feature.exam.event.ExamSubmittedEvent;
 import com.journey.feature.exam.dto.*;
 import com.journey.feature.exam.entity.*;
 import com.journey.feature.exam.repository.*;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,6 +34,7 @@ public class ExamService {
     private final ExamAnswerRepository examAnswerRepository;
     private final ExamAttemptRepository examAttemptRepository;
     private final IdGeneratorService idGenerator;
+    private final ApplicationEventPublisher events;
 
     /** Option choices are 1001-based codes, matching every other enum-ish value in the system. */
     public static final int OPTION_CODE_BASE = 1001;
@@ -281,6 +285,9 @@ public class ExamService {
             );
         }
 
+        // The reviewer has to grade this; the listener works out who that is.
+        events.publishEvent(new ExamSubmittedEvent(learnerJourneyId, attempt.getId()));
+
         return getAttempt(learnerJourneyId);
     }
 
@@ -339,6 +346,13 @@ public class ExamService {
         attempt.setPassed(req.passed());
 
         examAttemptRepository.save(attempt);
+
+        events.publishEvent(new ExamGradedEvent(
+                attempt.getLearnerJourneyId(),
+                attempt.getId(),
+                attempt.getScorePercent(),
+                Boolean.TRUE.equals(attempt.getPassed()),
+                attempt.getGradedByName()));
 
         return getAttempt(attempt.getLearnerJourneyId());
     }

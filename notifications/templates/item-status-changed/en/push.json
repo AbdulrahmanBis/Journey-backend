@@ -1,0 +1,4 @@
+{
+  "title": "${itemTitle} moved to ${statusEn}",
+  "body": "${actorName} changed the status of ${itemTitle} in ${journeyTitle}."
+}

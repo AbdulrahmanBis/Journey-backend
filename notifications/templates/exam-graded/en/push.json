@@ -1,0 +1,4 @@
+{
+  "title": "Your exam was graded: ${outcomeEn}",
+  "body": "${graderName} marked your ${journeyTitle} exam. You scored ${scorePercent}%."
+}

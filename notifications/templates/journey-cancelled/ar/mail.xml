@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>تم إلغاء رحلة ${journeyTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>تم إلغاء رحلة <strong>${journeyTitle}</strong>، ولم يعد مطلوبًا منك إكمالها.</p>
+      <p>لا يزال بإمكانك <a href="${appUrl}${link}">الاطلاع عليها</a>. إذا كان هذا غير متوقع،
+         تواصل مع مشرفك.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

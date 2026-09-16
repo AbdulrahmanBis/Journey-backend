@@ -1,0 +1,4 @@
+{
+  "title": "New note on ${itemTitle}",
+  "body": "${authorName} left a note on ${itemTitle} in ${journeyTitle}."
+}

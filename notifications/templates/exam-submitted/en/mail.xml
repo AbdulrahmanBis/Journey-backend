@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${learnerName} submitted the exam for ${journeyTitle}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${learnerName}</strong> has submitted the exam for
+       <strong>${journeyTitle}</strong>, and it is waiting to be graded.</p>
+    <p><a href="${appUrl}${link}">Open the submission</a> to mark it.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

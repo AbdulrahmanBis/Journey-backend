@@ -1,0 +1,6 @@
+{
+  "channels": ["IN_APP", "MAIL"],
+  "recipients": ["learner"],
+  "link": "/exam/${learnerJourneyId}",
+  "variables": ["journeyTitle", "graderName", "scorePercent", "outcomeEn", "outcomeAr", "learnerJourneyId"]
+}

@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -38,8 +39,33 @@ public class UserService {
                 .stream().map(this::toDto).toList();
     }
 
+    /**
+     * Stores the language the person picked in the UI, used to choose which language to email them
+     * in. Only ever called for the caller.s own id — see UserController.
+     */
+    @Transactional
+    public void updatePreferredLanguage(String id, String language) {
+        String tag = language == null ? "" : language.trim().toLowerCase();
+        if (!tag.equals("en") && !tag.equals("ar")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unsupported language: " + language + ". Expected \"en\" or \"ar\".");
+        }
+        User user = userRepository.findById(id).orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found: " + id));
+        user.setPreferredLanguage(tag);
+        userRepository.save(user);
+    }
+
     public UserDto getById(String id) {
         return toDto(findOrThrow(id));
+    }
+
+    /** True when {@code learnerId} is a Learner currently assigned to {@code seniorId}. */
+    public boolean isLearnerOfSenior(String learnerId, String seniorId) {
+        return userRepository.findById(learnerId)
+                .filter(u -> Integer.valueOf(UserRole.LEARNER.getCode()).equals(u.getRole()))
+                .filter(u -> seniorId.equals(u.getSeniorId()))
+                .isPresent();
     }
 
     /** Internal — returns entity (used by AuthService and services that need the password). */

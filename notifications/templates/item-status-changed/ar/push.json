@@ -1,0 +1,4 @@
+{
+  "title": "${itemTitle} أصبحت ${statusAr}",
+  "body": "غيّر ${actorName} حالة ${itemTitle} ضمن ${journeyTitle}."
+}

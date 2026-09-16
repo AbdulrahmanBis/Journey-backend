@@ -37,6 +37,7 @@ public class IdGeneratorService {
     public static final String EXAM = "exams";
     public static final String EXAM_QUESTION = "exam_questions";
     public static final String EXAM_ATTEMPT = "exam_attempts";
+    public static final String NOTIFICATION = "notifications";
 
     /**
      * @param table  physical table name — must be one of the constants above (never user input;
@@ -61,7 +62,8 @@ public class IdGeneratorService {
     private void assertKnownTable(String table) {
         switch (table) {
             case USER, JOURNEY, JOURNEY_ITEM, JOURNEY_ITEM_ATTACHMENT, LEARNER_JOURNEY,
-                 LEARNER_JOURNEY_ITEM, NOTE, EXAM, EXAM_QUESTION, EXAM_ATTEMPT -> { /* ok */ }
+                 LEARNER_JOURNEY_ITEM, NOTE, EXAM, EXAM_QUESTION, EXAM_ATTEMPT,
+                 NOTIFICATION -> { /* ok */ }
             default -> throw new IllegalArgumentException("Unknown table for id generation: " + table);
         }
     }

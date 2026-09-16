@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>أكمل ${learnerName} رحلة ${journeyTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>أكمل <strong>${learnerName}</strong> جميع عناصر رحلة <strong>${journeyTitle}</strong>.</p>
+      <p><a href="${appUrl}${link}">راجع الرحلة</a> للاطلاع على ملاحظاته والساعات المسجّلة،
+         ولتحديد الاختبار أو تصحيحه.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

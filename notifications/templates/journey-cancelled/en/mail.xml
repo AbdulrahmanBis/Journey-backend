@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${journeyTitle} was cancelled</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p>The journey <strong>${journeyTitle}</strong> has been cancelled, so you no longer need to
+       work through it.</p>
+    <p>You can still <a href="${appUrl}${link}">view it</a>. If this is unexpected, speak to your
+       senior.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

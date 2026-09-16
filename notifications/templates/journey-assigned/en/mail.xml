@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Email for the journey-assigned notification.
+
+  Not sent yet: config.json lists only IN_APP. Adding "MAIL" to its channels switches it on.
+  ${link} and ${appUrl} are supplied automatically; every other ${...} must be declared in
+  config.json under "variables".
+-->
+<mail>
+  <subject>${assignerName} assigned you to ${journeyTitle}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${assignerName}</strong> has assigned you to the journey
+       <strong>${journeyTitle}</strong>.</p>
+    <p><a href="${appUrl}${link}">Open the journey</a> to see what is expected and start
+       working through it.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

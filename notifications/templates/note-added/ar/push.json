@@ -1,0 +1,4 @@
+{
+  "title": "ملاحظة جديدة على ${itemTitle}",
+  "body": "أضاف ${authorName} ملاحظة على ${itemTitle} ضمن ${journeyTitle}."
+}

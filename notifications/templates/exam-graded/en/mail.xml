@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>Your ${journeyTitle} exam was graded: ${outcomeEn}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${graderName}</strong> has marked your exam for
+       <strong>${journeyTitle}</strong>.</p>
+    <p>Result: <strong>${outcomeEn}</strong> — ${scorePercent}%.</p>
+    <p><a href="${appUrl}${link}">See the full result</a>, including how each answer was marked.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>
