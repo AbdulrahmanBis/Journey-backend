@@ -119,6 +119,21 @@ try {
   outline = (await call(ln, 'GET', `/learner-journeys/${lj.id}/outline`)).json;
   ok('All units completed (no exam): journey completed', outline.status.code === 1004 && outline.percentComplete === 100, `${outline.status.code} ${outline.percentComplete}`);
 
+
+  // ── Certificates ─────────────────────────────────────────────────────────
+  const certs = (await call(ln, 'GET', '/certificates')).json;
+  const cert = certs.find((c) => c.learnerJourneyId === lj.id);
+  ok('Completing the journey issues a certificate', !!cert && /^JRN-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(cert.code) && cert.learnerName === 'Tmp Units Learner', JSON.stringify(certs));
+  ok('The reviewer can open it', (await call(sr, 'GET', `/certificates/${cert?.id}`)).status === 200);
+  await wait(800);
+  const lnNotes = (await call(ln, 'GET', '/notifications?size=30')).json;
+  ok('Learner is told about the certificate', lnNotes.items.some((n) => n.templateId === 'certificate-issued' && n.link === `/certificates/${cert?.id}`), lnNotes.items.map((n) => n.templateId).join());
+  await call(admin, 'PATCH', `/learner-journeys/${lj.id}/status`, { status: 1002 });
+  ok('Reopening the journey removes the certificate', !(await call(ln, 'GET', '/certificates')).json.some((c) => c.learnerJourneyId === lj.id));
+  await call(admin, 'PATCH', `/learner-journeys/${lj.id}/status`, { status: 1004 });
+  const reissued = (await call(ln, 'GET', '/certificates')).json.find((c) => c.learnerJourneyId === lj.id);
+  ok('Completing it again issues a new one', !!reissued && reissued.code !== cert?.code, JSON.stringify(reissued));
+
   // ── Editing keeps progress ─────────────────────────────────────────────────
   const before = sql(`SELECT COUNT(*) FROM learner_journey_items WHERE learner_journey_id='${lj.id}' AND status=1004`);
   const edited = await call(sr, 'PUT', `/journeys/${state.journeyId}`, {

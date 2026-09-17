@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>Certificate earned: ${title}</subject>
+  <body><![CDATA[
+    <p>Congratulations,</p>
+    <p>You completed the ${kindEn} <strong>${title}</strong>, and your certificate is ready.</p>
+    <p><a href="${appUrl}${link}">View and download your certificate</a></p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

@@ -1,0 +1,12 @@
+{
+  "channels": [
+    "MAIL"
+  ],
+  "recipients": [
+    "recipient"
+  ],
+  "link": "/dashboard",
+  "variables": [
+    "recipientName"
+  ]
+}

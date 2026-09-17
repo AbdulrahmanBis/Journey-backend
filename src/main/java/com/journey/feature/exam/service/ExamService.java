@@ -51,6 +51,15 @@ public class ExamService {
     private static final int MAX_OPTIONS = 4;
 
 
+    /**
+     * The exam endpoint includes the answer key, so it is for staff only. Learners get their questions,
+     * without answers, through their own learner journey.
+     */
+    public ExamDto getExamForStaff(String journeyId) {
+        access.requireRole(AccessPolicy.STAFF);
+        return getExam(journeyId);
+    }
+
     @Transactional
     public ExamDto getExam(String journeyId) {
 

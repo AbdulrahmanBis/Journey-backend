@@ -1,0 +1,4 @@
+{
+  "title": "إعلان: ${announcementTitle}",
+  "body": "${authorName}: ${excerpt}"
+}

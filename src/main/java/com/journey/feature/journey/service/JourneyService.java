@@ -52,6 +52,7 @@ public class JourneyService {
     private final AccessPolicy access;
     private final JourneyUnitRepository unitRepository;
     private final UnitQuizQuestionRepository quizRepository;
+    private final com.journey.feature.exam.repository.ExamRepository examRepository;
 
     /** Unit quizzes are meant to be short ("1–2 questions"); this is the hard ceiling. */
     static final int MAX_QUIZ_QUESTIONS = 5;
@@ -59,7 +60,8 @@ public class JourneyService {
     // ─── Queries ──────────────────────────────────────────────────────────────
 
     public List<JourneyDto> getAllJourneys() {
-        return journeyRepository.findAll().stream().map(this::toDto).toList();
+        java.util.Set<String> withExam = new java.util.HashSet<>(examRepository.findAllJourneyIds());
+        return journeyRepository.findAll().stream().map(j -> toDto(j, withExam.contains(j.getId()))).toList();
     }
 
     public JourneyDto getById(String id) {
@@ -68,6 +70,13 @@ public class JourneyService {
 
     public Journey getEntityById(String id) {
         return findOrThrow(id);
+    }
+
+    /** The items endpoint returns full content, so it is for staff only. */
+    public List<JourneyItemDto> getItemsForStaff(String journeyId) {
+        access.requireRole(AccessPolicy.STAFF);
+        findOrThrow(journeyId);
+        return getItemsForJourney(journeyId);
     }
 
     /** Items with their attachments. Attachments are fetched in one query, not per item. */
@@ -396,8 +405,12 @@ public class JourneyService {
     // ─── Mappers ──────────────────────────────────────────────────────────────
 
     public JourneyDto toDto(Journey j) {
+        return toDto(j, null);
+    }
+
+    private JourneyDto toDto(Journey j, Boolean hasExam) {
         return new JourneyDto(j.getId(), j.getTitle(), j.getDescription(), j.getTechTag(), j.getTargetDays(),
-                j.getCreatedById(), j.getCreatedByName(), j.getCreatedAt(), j.getUpdatedAt());
+                j.getCreatedById(), j.getCreatedByName(), j.getCreatedAt(), j.getUpdatedAt(), hasExam);
     }
 
     public JourneyItemDto toItemDto(JourneyItem i) {

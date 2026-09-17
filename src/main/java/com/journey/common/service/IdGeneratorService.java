@@ -48,6 +48,8 @@ public class IdGeneratorService {
     public static final String JOURNEY_UNIT = "journey_units";
     public static final String UNIT_QUIZ_QUESTION = "unit_quiz_questions";
     public static final String LEARNER_JOURNEY_UNIT = "learner_journey_units";
+    public static final String ANNOUNCEMENT = "announcements";
+    public static final String CERTIFICATE = "certificates";
 
     /**
      * @param table  physical table name — must be one of the constants above (never user input;
@@ -77,7 +79,7 @@ public class IdGeneratorService {
             case USER, JOURNEY, JOURNEY_ITEM, JOURNEY_ITEM_ATTACHMENT, LEARNER_JOURNEY,
                  LEARNER_JOURNEY_ITEM, NOTE, EXAM, EXAM_QUESTION, EXAM_ATTEMPT,
                  NOTIFICATION, DEPARTMENT, PACKAGE, PACKAGE_ASSIGNMENT,
-                 JOURNEY_UNIT, UNIT_QUIZ_QUESTION, LEARNER_JOURNEY_UNIT -> { /* ok */ }
+                 JOURNEY_UNIT, UNIT_QUIZ_QUESTION, LEARNER_JOURNEY_UNIT, ANNOUNCEMENT, CERTIFICATE -> { /* ok */ }
             default -> throw new IllegalArgumentException("Unknown table for id generation: " + table);
         }
     }

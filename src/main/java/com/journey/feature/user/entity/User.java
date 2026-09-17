@@ -43,6 +43,10 @@ public class User {
     @Column(name = "intro_seen_version")
     private Integer introSeenVersion;
 
+    /** When the person hid the getting-started checklist; null = still shown. */
+    @Column(name = "getting_started_dismissed_at")
+    private java.time.LocalDateTime gettingStartedDismissedAt;
+
     /** Set for learners only — references another User's id. */
     @Column(name = "senior_id", length = 36)
     private String seniorId;

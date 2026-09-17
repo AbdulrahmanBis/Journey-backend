@@ -24,7 +24,7 @@ public class ExamController {
     @GetMapping("/api/journeys/{journeyId}/exam")
     public ResponseEntity<ExamDto> getExam(
             @PathVariable String journeyId) {
-        return ResponseEntity.ok(service.getExam(journeyId));
+        return ResponseEntity.ok(service.getExamForStaff(journeyId));
     }
 
     /** POST /api/journeys/:journeyId/exam */

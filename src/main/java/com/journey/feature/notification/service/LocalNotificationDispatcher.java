@@ -58,6 +58,18 @@ public class LocalNotificationDispatcher implements NotificationDispatcher {
         }
     }
 
+    @Override
+    // REQUIRES_NEW: callers run after their own commit, where joining that finished transaction would never commit.
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void withdraw(String link) {
+        try {
+            int removed = repository.deleteByLink(link);
+            log.debug("Withdrew {} notification(s) linking to {}.", removed, link);
+        } catch (RuntimeException e) {
+            log.error("Could not withdraw notifications linking to {}: {}", link, e.getMessage(), e);
+        }
+    }
+
     /*
      * No @Transactional here: it would be self-invocation from dispatch() and the proxy would
      * skip it anyway. It is not wanted either — each repository.save() is already its own

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>Journey test email</subject>
+  <body><![CDATA[
+    <p>Hello ${recipientName},</p>
+    <p>This is a test from Journey. If you are reading it, notification email is set up correctly.</p>
+    <p><a href="${appUrl}${link}">Open Journey</a></p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

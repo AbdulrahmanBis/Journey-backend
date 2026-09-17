@@ -19,6 +19,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Stri
 
     long countByRecipientIdAndReadAtIsNull(String recipientId);
 
+    @Modifying
+    @Query("DELETE FROM Notification n WHERE n.link = :link")
+    int deleteByLink(@Param("link") String link);
+
     /**
      * Marks everything unread as read in one statement.
      *

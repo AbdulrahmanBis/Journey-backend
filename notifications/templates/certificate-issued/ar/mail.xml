@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>حصلت على شهادة: ${title}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>تهانينا،</p>
+      <p>أكملت ${kindAr} <strong>${title}</strong>، وشهادتك جاهزة.</p>
+      <p><a href="${appUrl}${link}">اعرض شهادتك ونزّلها</a></p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

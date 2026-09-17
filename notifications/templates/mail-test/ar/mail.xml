@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>رسالة تجريبية من Journey</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا ${recipientName}،</p>
+      <p>هذه رسالة تجريبية من Journey. إن وصلتك فإعدادات البريد الإلكتروني للإشعارات تعمل بشكل صحيح.</p>
+      <p><a href="${appUrl}${link}">افتح Journey</a></p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

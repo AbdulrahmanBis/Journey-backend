@@ -188,6 +188,14 @@ async function main() {
   await check('Learner reads the company-wide journey list', ln1, 'GET', '/journeys', 200);
 
   await check('Learner saves an exam', ln1, 'POST', `/journeys/${someJourney}/exam`, { title: 'x', passingScorePercent: 50, questions: [] }, 403);
+  await check('Learner reads an exam answer key', ln1, 'GET', `/journeys/${someJourney}/exam`, 403);
+  await check('Staff read an exam answer key', sr1, 'GET', `/journeys/${someJourney}/exam`, 200);
+  await check('Learner reads full item content', ln1, 'GET', `/journeys/${someJourney}/items`, 403);
+  await check('Staff preview a journey', mgrIt, 'GET', `/journeys/${someJourney}/preview`, 200, undefined,
+    (j) => (!j.limited && j.units.every((u) => !u.locked && u.quiz) ? '' : 'staff preview should be complete, quizzes included'));
+  await check('Learner previews a journey', lnSales, 'GET', `/journeys/${someJourney}/preview`, 200, undefined,
+    (j) => (j.limited && j.units.every((u, i) => u.locked === (i > 0) && !u.quiz && (i === 0 || u.items.every((it) => !it.description && !it.attachments))) && (!j.exam || !j.exam.questions)
+      ? '' : 'learner preview leaked content past unit 1 or questions'));
   await check("Learner reads another learner's exam attempt", lnSales, 'GET', `/learner-journeys/${ln1Lj.id}/exam-attempt`, 403);
   await check("Someone else submits a learner's exam", srSales, 'POST', `/learner-journeys/${salesLj}/exam-attempt`, { examId: 'x', answers: [] }, 403);
 
@@ -285,6 +293,92 @@ async function main() {
   await check('Dismissal is on the account', lnSales, 'GET', `/users/${lnSalesUser.id}`, 200, undefined,
     (j) => (j.introSeenVersion === 1 ? '' : `introSeenVersion ${j.introSeenVersion}`));
 
+  // ── Announcements ─────────────────────────────────────────────────────────────────────────
+  const waitFor = async (who, test) => {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const r = await call(who.token, 'GET', '/notifications?size=50');
+      if (test(r.json?.items ?? [])) return;
+      await new Promise((done) => setTimeout(done, 300));
+    }
+  };
+  const post = (title, extra = {}) => ({ title, body: '<p>Matrix announcement body</p>', ...extra });
+  const annLink = (id) => `/dashboard?announcement=${id}`;
+  await check('Learner posts an announcement', lnSales, 'POST', '/announcements', post('Matrix learner post'), 403);
+  await check('Senior posts an announcement', srSales, 'POST', '/announcements', post('Matrix senior post'), 403);
+  const annSales = (await check('Manager posts to their department', mgrSales, 'POST', '/announcements', post('Matrix Sales update'), 201, undefined,
+    (j) => (j.departments.length === 1 && j.departments[0].id === salesDept && !j.orgWide ? '' : 'expected the Sales department only'))).json?.id;
+  await check('Manager posts to another department', mgrIt, 'POST', '/announcements', post('Matrix IT to Sales', { departmentIds: [salesDept] }), 403);
+  await check('Manager posts company-wide', mgrIt, 'POST', '/announcements', post('Matrix IT to all', { orgWide: true }), 403);
+  const annOrg = (await check('HR posts company-wide', hr, 'POST', '/announcements', post('Matrix company news', { orgWide: true }), 201)).json?.id;
+  await check('HR posts without an audience', hr, 'POST', '/announcements', post('Matrix nobody'), 400);
+  await check('HR posts to an unknown department', hr, 'POST', '/announcements', post('Matrix ghost', { departmentIds: ['dep-none'] }), 400);
+  await check('Empty announcement', hr, 'POST', '/announcements', { title: 'Matrix empty', body: '<p><br></p>', orgWide: true }, 400);
+  await check('Show-until in the past', hr, 'POST', '/announcements', post('Matrix past', { orgWide: true, showUntil: isoIn(-1) }), 400);
+
+  await check('Sales learner dashboard', lnSales, 'GET', '/announcements/active', 200, undefined,
+    (j) => (ids(j).includes(annSales) && ids(j).includes(annOrg) ? '' : 'should show the Sales and the company-wide announcement'));
+  await check('IT learner dashboard', ln1, 'GET', '/announcements/active', 200, undefined,
+    (j) => (ids(j).includes(annOrg) && !ids(j).includes(annSales) ? '' : 'should show only the company-wide announcement'));
+  await check('IT learner opens a Sales announcement', ln1, 'GET', `/announcements/${annSales}`, 403);
+  await waitFor(lnSales, (items) => items.some((n) => n.link === annLink(annSales)));
+  await check('Sales learner is notified', lnSales, 'GET', '/notifications?size=50', 200, undefined,
+    (j) => (j.items.some((n) => n.link === annLink(annSales)) ? '' : 'no announcement notification'));
+  await check('Author is not notified of their own post', mgrSales, 'GET', '/notifications?size=50', 200, undefined,
+    (j) => (j.items.some((n) => n.link === annLink(annSales)) ? 'author was notified' : ''));
+
+  for (const who of [lnSales, srSales]) await check('Announcements page', who, 'GET', '/announcements', 403);
+  await check('Announcements page', mgrIt, 'GET', '/announcements', 200, undefined,
+    (j) => (ids(j).includes(annOrg) && !ids(j).includes(annSales) ? '' : 'IT manager should see company-wide but not Sales'));
+  await check('Announcements page for another department', mgrIt, 'GET', `/announcements?departmentId=${salesDept}`, 403);
+  await check('Announcements page for another department', hr, 'GET', `/announcements?departmentId=${salesDept}`, 200, undefined,
+    (j) => (ids(j).includes(annSales) ? '' : 'HR should see the Sales announcement'));
+
+  await check("Manager edits another department's announcement", mgrIt, 'PUT', `/announcements/${annSales}`, post('Matrix hijack'), 403);
+  await check('Manager edits an HR announcement', mgrSales, 'PUT', `/announcements/${annOrg}`, post('Matrix hijack'), 403);
+  await check('Manager edits their own announcement', mgrSales, 'PUT', `/announcements/${annSales}`, post('Matrix Sales update (edited)'), 200, undefined,
+    (j) => (j.title === 'Matrix Sales update (edited)' && j.canEdit ? '' : 'edit not applied'));
+  await check('Dismiss an announcement not addressed to you', ln1, 'POST', `/announcements/${annSales}/dismiss`, 403);
+  await check('Learner dismisses an announcement', lnSales, 'POST', `/announcements/${annOrg}/dismiss`, 204);
+  await check('Dismissed one leaves the dashboard', lnSales, 'GET', '/announcements/active', 200, undefined,
+    (j) => (!ids(j).includes(annOrg) && ids(j).includes(annSales) ? '' : 'dismissal not applied to this learner only'));
+  await check('Dismissed one still opens from its notification', lnSales, 'GET', `/announcements/${annOrg}`, 200);
+  await check("Manager deletes another department's announcement", mgrIt, 'DELETE', `/announcements/${annSales}`, 403);
+  await check('Manager deletes their own announcement', mgrSales, 'DELETE', `/announcements/${annSales}`, 204);
+  await waitFor(lnSales, (items) => !items.some((n) => n.link === annLink(annSales)));
+  await check('Deleting withdraws its notifications', lnSales, 'GET', '/notifications?size=50', 200, undefined,
+    (j) => (j.items.some((n) => n.link === annLink(annSales)) ? 'notification still there' : ''));
+  await check('HR deletes any announcement', hr, 'DELETE', `/announcements/${annOrg}`, 204);
+
+  // ── Certificates ──────────────────────────────────────────────────────────────────────────
+  await check('Learner lists own certificates', lnSales, 'GET', '/certificates', 200, undefined,
+    (j) => (Array.isArray(j) ? '' : 'expected a list'));
+  await check("Learner lists another learner's certificates", ln1, 'GET', `/certificates?learnerId=${lnSalesUser.id}`, 403);
+  await check("Manager lists own department learner's certificates", mgrSales, 'GET', `/certificates?learnerId=${lnSalesUser.id}`, 200);
+  await check("Manager lists another department's learner's certificates", mgrIt, 'GET', `/certificates?learnerId=${lnSalesUser.id}`, 403);
+  await check("HR lists any learner's certificates", hr, 'GET', `/certificates?learnerId=${lnSalesUser.id}`, 200);
+  const ln1Certs = (await call(ln1.token, 'GET', '/certificates')).json ?? [];
+  if (ln1Certs.length) {
+    await check("Learner opens another learner's certificate", lnSales, 'GET', `/certificates/${ln1Certs[0].id}`, 403);
+    await check("Manager opens another department's certificate", mgrSales, 'GET', `/certificates/${ln1Certs[0].id}`, 403);
+  }
+
+  // ── Email check (Admin) ───────────────────────────────────────────────────────────────────
+  for (const who of [ln1, mgrIt, hr]) await check('Mail status', who, 'GET', '/notifications/mail-status', 403);
+  await check('Mail status', admin, 'GET', '/notifications/mail-status', 200, undefined,
+    (j) => (typeof j.enabled === 'boolean' && typeof j.configured === 'boolean' && !('password' in j) ? '' : 'unexpected shape'));
+  await check('Send a test email', hr, 'POST', '/notifications/test-email', 403);
+
+  // ── Getting started ───────────────────────────────────────────────────────────────────────
+  await check('New manager checklist', mgrSales, 'GET', '/getting-started', 200, undefined,
+    (j) => (j.role.code === 1002 && j.steps.length === 5 && j.steps.find((s) => s.key === 'SENIORS')?.done && !j.dismissed ? '' : JSON.stringify(j)));
+  await check('Senior checklist', srSales, 'GET', '/getting-started', 200, undefined,
+    (j) => (j.steps.length === 4 && j.steps.find((s) => s.key === 'HAS_LEARNERS')?.done ? '' : JSON.stringify(j)));
+  await check('Learner has no checklist', lnSales, 'GET', '/getting-started', 200, undefined,
+    (j) => (j.steps.length === 0 ? '' : 'learner got steps'));
+  await check('Manager hides the checklist', mgrSales, 'POST', '/getting-started/dismiss', 204);
+  await check('Hidden checklist stays hidden', mgrSales, 'GET', '/getting-started', 200, undefined,
+    (j) => (j.dismissed ? '' : 'not dismissed'));
+
   // ── Report ────────────────────────────────────────────────────────────────────────────
   const failed = results.filter((r) => !r.ok);
   for (const r of results) {
@@ -309,6 +403,7 @@ async function cleanup() {
         DELETE FROM learner_journey_items WHERE learner_journey_id IN (SELECT id FROM learner_journeys WHERE learner_id IN (${list}));
         DELETE FROM learner_journeys WHERE learner_id IN (${list});
         DELETE FROM notifications WHERE recipient_id IN (${list}) OR variables_json LIKE '%Matrix%';
+        DELETE FROM announcements WHERE author_id IN (${list});
         UPDATE users SET senior_id = NULL WHERE senior_id IN (${list});
         DELETE FROM users WHERE id IN (${list});`;
       const env = process.env;

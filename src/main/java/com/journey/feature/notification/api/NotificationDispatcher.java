@@ -23,4 +23,10 @@ public interface NotificationDispatcher {
      * the channels the config lists.
      */
     void dispatch(NotificationRequest request);
+
+    /**
+     * Removes every in-app notification pointing at this in-app route, for everyone — used when the thing
+     * it announced no longer exists. Must not throw either.
+     */
+    void withdraw(String link);
 }

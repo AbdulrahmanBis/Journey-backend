@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>Announcement: ${announcementTitle}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p>${authorName} posted an announcement:</p>
+    <h2 style="font-size:18px;margin:16px 0 8px">${announcementTitle}</h2>
+    <p style="color:#555">${excerpt}</p>
+    <p><a href="${appUrl}${link}">Read the announcement</a></p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

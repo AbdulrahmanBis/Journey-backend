@@ -34,3 +34,6 @@ build/
 
 # Uploaded files (bytes never belong in git)
 /storage/
+
+# Local mail sink output (scripts/mail-sink.mjs)
+mail-sink/

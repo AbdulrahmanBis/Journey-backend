@@ -3,6 +3,8 @@ package com.journey.feature.journey.controller;
 import com.journey.feature.journey.dto.CreateJourneyRequest;
 import com.journey.feature.journey.dto.JourneyDto;
 import com.journey.feature.journey.dto.JourneyItemDto;
+import com.journey.feature.journey.dto.JourneyPreviewDto;
+import com.journey.feature.journey.service.JourneyPreviewService;
 import com.journey.feature.journey.service.JourneyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import java.util.List;
 public class JourneyController {
 
     private final JourneyService journeyService;
+    private final JourneyPreviewService previewService;
 
     /** GET /api/journeys */
     @GetMapping
@@ -37,10 +40,16 @@ public class JourneyController {
         return ResponseEntity.ok(journeyService.getUnitsForJourney(id));
     }
 
-    /** GET /api/journeys/:id/items */
+    /** GET /api/journeys/:id/items — full item content, so staff only (learners read through their assignment or the preview). */
     @GetMapping("/{id}/items")
     public ResponseEntity<List<JourneyItemDto>> getItems(@PathVariable String id) {
-        return ResponseEntity.ok(journeyService.getItemsForJourney(id));
+        return ResponseEntity.ok(journeyService.getItemsForStaff(id));
+    }
+
+    /** GET /api/journeys/:id/preview — the journey as a learner would go through it, nothing saved (learners: first unit only). */
+    @GetMapping("/{id}/preview")
+    public ResponseEntity<JourneyPreviewDto> preview(@PathVariable String id) {
+        return ResponseEntity.ok(previewService.preview(id));
     }
 
     /** POST /api/journeys */

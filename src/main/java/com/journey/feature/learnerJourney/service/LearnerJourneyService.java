@@ -227,12 +227,16 @@ public class LearnerJourneyService {
         access.requireViewable(lj.getLearnerId());
         ItemStatus status = resolveStatus(req.status());
         boolean wasCancelled = lj.getStatus() == ItemStatus.CANCELLED.getCode();
+        int statusBefore = lj.getStatus();
 
         lj.setStatus(status.getCode());
         if (status == ItemStatus.COMPLETED && lj.getCompletedAt() == null) {
             lj.setCompletedAt(LocalDateTime.now());
         }
         learnerJourneyRepository.save(lj);
+        if (status.getCode() != statusBefore) {
+            events.publishEvent(new com.journey.feature.learnerJourney.event.JourneyStatusChangedEvent(lj.getId(), status.getCode()));
+        }
 
         // Only on the transition — re-cancelling an already cancelled journey is not news.
         if (status == ItemStatus.CANCELLED && !wasCancelled) {
@@ -548,6 +552,7 @@ public class LearnerJourneyService {
         boolean anyStarted = items.stream().anyMatch(i -> i.getStatus() != ItemStatus.NEW.getCode())
                 || units.stream().anyMatch(u -> u.getStatus() != ItemStatus.NEW.getCode());
         boolean wasCompleted = lj.getStatus() == ItemStatus.COMPLETED.getCode();
+        int statusBefore = lj.getStatus();
 
         if (allCompleted) {
             lj.setStatus(ItemStatus.COMPLETED.getCode());
@@ -557,6 +562,9 @@ public class LearnerJourneyService {
             if (lj.getStartedAt() == null) lj.setStartedAt(LocalDateTime.now());
         }
         learnerJourneyRepository.save(lj);
+        if (lj.getStatus() != statusBefore) {
+            events.publishEvent(new com.journey.feature.learnerJourney.event.JourneyStatusChangedEvent(lj.getId(), lj.getStatus()));
+        }
 
         /*
           Fires on the transition only. This method runs after every single item update, so

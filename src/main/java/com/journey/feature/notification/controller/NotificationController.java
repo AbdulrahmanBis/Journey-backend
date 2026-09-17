@@ -30,6 +30,8 @@ import java.util.Map;
 public class NotificationController {
 
     private final NotificationService notifications;
+    private final com.journey.feature.notification.service.MailNotificationSender mail;
+    private final com.journey.common.security.AccessPolicy access;
 
     /** Full history, paged — backs the /notifications page. */
     @GetMapping
@@ -67,6 +69,24 @@ public class NotificationController {
     @PatchMapping("/read-all")
     public ResponseEntity<Map<String, Integer>> markAllRead() {
         return ResponseEntity.ok(Map.of("marked", notifications.markAllRead(currentUserId())));
+    }
+
+    /** GET /api/notifications/mail-status — is email on and configured (Admin). No secrets are returned. */
+    @GetMapping("/mail-status")
+    public ResponseEntity<Map<String, Object>> mailStatus() {
+        access.requireRole(com.journey.common.enums.UserRole.ADMIN);
+        return ResponseEntity.ok(mail.status());
+    }
+
+    /** POST /api/notifications/test-email — sends a test email to the calling Admin now; 409 with the reason if it fails. */
+    @org.springframework.web.bind.annotation.PostMapping("/test-email")
+    public ResponseEntity<Map<String, String>> testEmail() {
+        access.requireRole(com.journey.common.enums.UserRole.ADMIN);
+        try {
+            return ResponseEntity.ok(Map.of("sentTo", mail.sendTest(currentUserId())));
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+        }
     }
 
     /** An explicit {@code ?lang=} wins, because the UI switcher is what the reader actually set. */

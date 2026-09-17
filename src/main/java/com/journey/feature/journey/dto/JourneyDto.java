@@ -11,5 +11,7 @@ public record JourneyDto(
         String createdById,
         String createdByName,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        /** Set on the journeys list (so it needs no request per journey); null elsewhere. */
+        Boolean hasExam
 ) {}

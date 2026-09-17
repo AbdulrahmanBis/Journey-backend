@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>إعلان: ${announcementTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>نشر ${authorName} إعلانًا:</p>
+      <h2 style="font-size:18px;margin:16px 0 8px">${announcementTitle}</h2>
+      <p style="color:#555">${excerpt}</p>
+      <p><a href="${appUrl}${link}">اقرأ الإعلان</a></p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

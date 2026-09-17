@@ -1,0 +1,16 @@
+{
+  "channels": [
+    "IN_APP",
+    "MAIL"
+  ],
+  "recipients": [
+    "recipient"
+  ],
+  "link": "/dashboard?announcement=${announcementId}",
+  "variables": [
+    "announcementId",
+    "announcementTitle",
+    "excerpt",
+    "authorName"
+  ]
+}

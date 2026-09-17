@@ -1,0 +1,16 @@
+{
+  "channels": [
+    "IN_APP",
+    "MAIL"
+  ],
+  "recipients": [
+    "learner"
+  ],
+  "link": "/certificates/${certificateId}",
+  "variables": [
+    "certificateId",
+    "title",
+    "kindEn",
+    "kindAr"
+  ]
+}
