@@ -1,5 +1,7 @@
 package com.journey.feature.user.controller;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.UserRole;
 import com.journey.common.security.AccessPolicy;
 import com.journey.feature.user.dto.CreateUserRequest;
@@ -11,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -104,10 +105,10 @@ public class UserController {
             try {
                 return UserRole.fromEnglish(role);
             } catch (IllegalArgumentException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role: " + role);
+                throw new ApiException(ErrorCode.UNKNOWN_CODE, role);
             }
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role code: " + role);
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, role);
         }
     }
 }

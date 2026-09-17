@@ -1,5 +1,7 @@
 package com.journey.feature.journeyPackage.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.security.AccessPolicy;
 import com.journey.common.service.IdGeneratorService;
 import com.journey.feature.journey.entity.Journey;
@@ -14,10 +16,8 @@ import com.journey.feature.journeyPackage.repository.PackageAssignmentRepository
 import com.journey.feature.journeyPackage.repository.PackageJourneyRepository;
 import com.journey.feature.user.entity.User;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -87,8 +87,7 @@ public class PackageService {
         access.requireRole(AccessPolicy.STAFF);
         JourneyPackage pkg = requirePackage(id);
         if (assignmentRepository.countByPackageId(id) > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This package has been assigned, so it can't be deleted.");
+            throw new ApiException(ErrorCode.PACKAGE_IN_USE);
         }
         packageJourneyRepository.deleteByPackageId(id);
         packageRepository.delete(pkg);
@@ -98,7 +97,7 @@ public class PackageService {
 
     public JourneyPackage requirePackage(String id) {
         return packageRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Package not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.PACKAGE_NOT_FOUND));
     }
 
     public List<PackageJourney> journeysOf(String packageId) {
@@ -110,7 +109,7 @@ public class PackageService {
     /** Every id must be a real journey, and each may appear once. */
     private List<String> validJourneyIds(List<String> ids) {
         if (new HashSet<>(ids).size() != ids.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A journey can only appear once in a package.");
+            throw new ApiException(ErrorCode.PACKAGE_DUPLICATE_JOURNEY);
         }
         ids.forEach(journeyService::getEntityById); // 404 for an unknown journey
         return ids;

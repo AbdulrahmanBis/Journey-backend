@@ -1,11 +1,12 @@
 package com.journey.feature.notification.controller;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.feature.notification.dto.NotificationDto;
 import com.journey.feature.notification.dto.NotificationPageDto;
 import com.journey.feature.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,7 +17,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -82,11 +82,7 @@ public class NotificationController {
     @org.springframework.web.bind.annotation.PostMapping("/test-email")
     public ResponseEntity<Map<String, String>> testEmail() {
         access.requireRole(com.journey.common.enums.UserRole.ADMIN);
-        try {
-            return ResponseEntity.ok(Map.of("sentTo", mail.sendTest(currentUserId())));
-        } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
-        }
+        return ResponseEntity.ok(Map.of("sentTo", mail.sendTest(currentUserId())));
     }
 
     /** An explicit {@code ?lang=} wins, because the UI switcher is what the reader actually set. */
@@ -97,7 +93,7 @@ public class NotificationController {
     private String currentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
+            throw new ApiException(ErrorCode.AUTH_REQUIRED);
         }
         return auth.getName();
     }

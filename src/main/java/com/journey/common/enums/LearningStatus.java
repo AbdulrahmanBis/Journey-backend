@@ -1,5 +1,7 @@
 package com.journey.common.enums;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.dto.EnumValueDto;
 import lombok.Getter;
 
@@ -29,7 +31,7 @@ public enum LearningStatus {
         for (LearningStatus status : values()) {
             if (status.code == code) return status;
         }
-        throw new IllegalArgumentException("Unknown code: " + code);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
     }
 
     public EnumValueDto toDto() {

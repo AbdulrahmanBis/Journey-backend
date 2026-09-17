@@ -1,5 +1,7 @@
 package com.journey.common.enums;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.dto.EnumValueDto;
 import lombok.Getter;
 
@@ -50,7 +52,7 @@ public enum AttachmentKind {
                 return kind;
             }
         }
-        throw new IllegalArgumentException("Unknown attachment kind code: " + code);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
     }
 
     public static AttachmentKind fromEnglish(String english) {
@@ -59,6 +61,6 @@ public enum AttachmentKind {
                 return kind;
             }
         }
-        throw new IllegalArgumentException("Unknown attachment kind: " + english);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, english);
     }
 }

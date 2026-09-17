@@ -1,5 +1,7 @@
 package com.journey.feature.auth.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.UserRole;
 import com.journey.config.JwtUtil;
 import com.journey.feature.auth.dto.AuthResponse;
@@ -9,10 +11,8 @@ import com.journey.feature.user.entity.User;
 import com.journey.feature.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -39,11 +39,11 @@ public class AuthService {
         try {
             user = userService.getEntityByEmail(req.email());
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Incorrect email or password.");
+            throw new ApiException(ErrorCode.INVALID_CREDENTIALS);
         }
 
         if (!passwordEncoder.matches(req.password(), user.getPassword())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Incorrect email or password.");
+            throw new ApiException(ErrorCode.INVALID_CREDENTIALS);
         }
 
         String role = UserRole.fromCode(user.getRole()).getEnglish();
@@ -54,8 +54,7 @@ public class AuthService {
     /** Self-service signup always creates a Learner account, when it is enabled at all. */
     public AuthResponse signup(SignupRequest req) {
         if (!selfSignupEnabled) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Self-service signup is disabled. Ask HR or your manager for an account.");
+            throw new ApiException(ErrorCode.SIGNUP_DISABLED);
         }
         User created = userService.createSelfServiceLearner(
                 req.name(), req.email(), req.password(), selfSignupDepartmentId);

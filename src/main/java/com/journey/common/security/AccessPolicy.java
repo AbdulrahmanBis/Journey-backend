@@ -1,16 +1,16 @@
 package com.journey.common.security;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.UserRole;
 import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -64,11 +64,10 @@ public class AccessPolicy {
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated.");
+            throw new ApiException(ErrorCode.AUTH_REQUIRED);
         }
         User user = userRepository.findById(auth.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
-                        "Your account no longer exists."));
+                .orElseThrow(() -> new ApiException(ErrorCode.ACCOUNT_GONE));
 
         if (request != null) request.setAttribute(ACTOR_ATTRIBUTE, user, RequestAttributes.SCOPE_REQUEST);
         return user;
@@ -92,7 +91,7 @@ public class AccessPolicy {
     public User requireRole(UserRole... roles) {
         User actor = actor();
         if (!hasRole(actor, roles)) {
-            throw forbidden("Your role cannot do this.");
+            throw new ApiException(ErrorCode.ROLE_NOT_ALLOWED);
         }
         return actor;
     }
@@ -116,9 +115,9 @@ public class AccessPolicy {
      */
     public User requireViewable(String userId) {
         User target = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
         if (!canView(actor(), target)) {
-            throw forbidden("You cannot view this person.");
+            throw new ApiException(ErrorCode.PERSON_NOT_VISIBLE);
         }
         return target;
     }
@@ -152,7 +151,7 @@ public class AccessPolicy {
 
     public void requireCanManageAccount(User target) {
         if (!canManageAccount(actor(), target)) {
-            throw forbidden("You cannot change this account.");
+            throw new ApiException(ErrorCode.ACCOUNT_NOT_MANAGEABLE);
         }
     }
 
@@ -170,19 +169,19 @@ public class AccessPolicy {
         User actor = actor();
         if (hasRole(actor, UserRole.ADMIN)) return;
         if (hasRole(actor, UserRole.HR)) {
-            if (role == UserRole.ADMIN) throw forbidden("Only an Admin can grant the Admin role.");
+            if (role == UserRole.ADMIN) throw new ApiException(ErrorCode.GRANT_ADMIN_ONLY);
             return;
         }
         if (hasRole(actor, UserRole.MANAGER)) {
             if (role == UserRole.ADMIN || role == UserRole.HR) {
-                throw forbidden("A Manager cannot grant the " + role.getEnglish() + " role.");
+                throw new ApiException(ErrorCode.GRANT_ROLE_NOT_ALLOWED, ApiException.text(role.getEnglish(), role.getArabic()));
             }
             if (!Objects.equals(departmentId, actor.getDepartmentId())) {
-                throw forbidden("A Manager can only place people in their own department.");
+                throw new ApiException(ErrorCode.OWN_DEPARTMENT_ONLY);
             }
             return;
         }
-        throw forbidden("Your role cannot manage accounts.");
+        throw new ApiException(ErrorCode.ROLE_NOT_ALLOWED);
     }
 
     // ─── Department-scoped views ────────────────────────────────────────────────────────────
@@ -193,7 +192,7 @@ public class AccessPolicy {
      *
      * @param requested the department the client asked for, or null for "all"
      * @return a department id, or null meaning every department
-     * @throws ResponseStatusException 403 for a Manager asking about another department, and for
+     * @throws ApiException 403 for a Manager asking about another department, and for
      *                                 roles that have no organisation-level view at all
      */
     public String departmentScope(String requested) {
@@ -204,11 +203,11 @@ public class AccessPolicy {
         if (hasRole(actor, UserRole.MANAGER)) {
             String own = actor.getDepartmentId();
             if (requested != null && !requested.isBlank() && !requested.equals(own)) {
-                throw forbidden("A Manager can only view their own department.");
+                throw new ApiException(ErrorCode.OWN_DEPARTMENT_ONLY);
             }
             return own;
         }
-        throw forbidden("Your role has no organisation-wide view.");
+        throw new ApiException(ErrorCode.NO_ORGANISATION_VIEW);
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────────────
@@ -219,9 +218,5 @@ public class AccessPolicy {
 
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
-    }
-
-    private static ResponseStatusException forbidden(String message) {
-        return new ResponseStatusException(HttpStatus.FORBIDDEN, message);
     }
 }

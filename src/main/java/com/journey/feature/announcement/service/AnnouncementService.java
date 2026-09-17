@@ -1,5 +1,7 @@
 package com.journey.feature.announcement.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.UserRole;
 import com.journey.common.security.AccessPolicy;
 import com.journey.common.service.IdGeneratorService;
@@ -18,10 +20,8 @@ import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -93,7 +93,7 @@ public class AnnouncementService {
     public AnnouncementDto get(String id) {
         User actor = access.actor();
         Announcement a = findOrThrow(id);
-        if (!canRead(actor, a)) throw forbidden("This announcement is not addressed to you.");
+        if (!canRead(actor, a)) throw new ApiException(ErrorCode.ANNOUNCEMENT_NOT_ADDRESSED);
         return toDtos(List.of(a), actor).get(0);
     }
 
@@ -101,7 +101,7 @@ public class AnnouncementService {
     public void dismiss(String id) {
         User actor = access.actor();
         Announcement a = findOrThrow(id);
-        if (!a.reaches(actor.getDepartmentId())) throw forbidden("This announcement is not on your dashboard.");
+        if (!a.reaches(actor.getDepartmentId())) throw new ApiException(ErrorCode.ANNOUNCEMENT_NOT_ADDRESSED);
         AnnouncementDismissal.Key key = new AnnouncementDismissal.Key(id, actor.getId());
         if (!dismissals.existsById(key)) dismissals.save(new AnnouncementDismissal(id, actor.getId()));
     }
@@ -126,7 +126,7 @@ public class AnnouncementService {
     public AnnouncementDto update(String id, SaveAnnouncementRequest req) {
         User actor = access.requireRole(AUTHORS);
         Announcement a = findOrThrow(id);
-        if (!canEdit(actor, a)) throw forbidden("You can only edit announcements you posted.");
+        if (!canEdit(actor, a)) throw new ApiException(ErrorCode.ANNOUNCEMENT_OWN_ONLY);
         apply(a, req, actor);
         a.setUpdatedAt(LocalDateTime.now());
         announcements.save(a);
@@ -138,7 +138,7 @@ public class AnnouncementService {
     public void delete(String id) {
         User actor = access.requireRole(AUTHORS);
         Announcement a = findOrThrow(id);
-        if (!canEdit(actor, a)) throw forbidden("You can only delete announcements you posted.");
+        if (!canEdit(actor, a)) throw new ApiException(ErrorCode.ANNOUNCEMENT_OWN_ONLY);
         announcements.delete(a);
         events.publishEvent(new AnnouncementDeletedEvent(id));
     }
@@ -146,15 +146,15 @@ public class AnnouncementService {
     /** Validates the request against the caller's reach and copies it onto the announcement. */
     private void apply(Announcement a, SaveAnnouncementRequest req, User actor) {
         String title = req.title().trim();
-        if (title.isEmpty()) throw badRequest("Give the announcement a title.");
-        if (plainText(req.body()).isEmpty()) throw badRequest("Write the announcement.");
+        if (title.isEmpty()) throw new ApiException(ErrorCode.ANNOUNCEMENT_TITLE_REQUIRED);
+        if (plainText(req.body()).isEmpty()) throw new ApiException(ErrorCode.ANNOUNCEMENT_BODY_REQUIRED);
 
         LocalDate today = LocalDate.now();
         LocalDate showUntil = req.showUntil() == null ? today.plusDays(DEFAULT_SHOW_DAYS) : req.showUntil();
         // An edit may keep a date that has since passed; a new date must not be in the past.
         boolean unchanged = showUntil.equals(a.getShowUntil());
-        if (!unchanged && showUntil.isBefore(today)) throw badRequest("The show-until date is in the past.");
-        if (showUntil.isAfter(today.plusDays(MAX_SHOW_DAYS))) throw badRequest("An announcement can show for at most a year.");
+        if (!unchanged && showUntil.isBefore(today)) throw new ApiException(ErrorCode.ANNOUNCEMENT_SHOW_UNTIL_PAST);
+        if (showUntil.isAfter(today.plusDays(MAX_SHOW_DAYS))) throw new ApiException(ErrorCode.ANNOUNCEMENT_SHOW_UNTIL_TOO_FAR);
 
         Set<String> departments = new LinkedHashSet<>(req.departmentIds() == null ? List.of() : req.departmentIds());
         departments.removeIf(d -> d == null || d.isBlank());
@@ -164,16 +164,16 @@ public class AnnouncementService {
             if (orgWide) {
                 departments.clear();
             } else if (departments.isEmpty()) {
-                throw badRequest("Choose who the announcement is for.");
+                throw new ApiException(ErrorCode.ANNOUNCEMENT_AUDIENCE_REQUIRED);
             } else {
                 for (String d : departments) {
-                    if (!departmentRepository.existsById(d)) throw badRequest("Unknown department: " + d);
+                    if (!departmentRepository.existsById(d)) throw new ApiException(ErrorCode.UNKNOWN_DEPARTMENT);
                 }
             }
         } else {
             String own = actor.getDepartmentId();
             if (orgWide || departments.stream().anyMatch(d -> !d.equals(own))) {
-                throw forbidden("A Manager can only post to their own department.");
+                throw new ApiException(ErrorCode.OWN_DEPARTMENT_ONLY);
             }
             departments = new LinkedHashSet<>(List.of(own));
         }
@@ -260,14 +260,6 @@ public class AnnouncementService {
 
     private Announcement findOrThrow(String id) {
         return announcements.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Announcement not found."));
-    }
-
-    private static ResponseStatusException forbidden(String message) {
-        return new ResponseStatusException(HttpStatus.FORBIDDEN, message);
-    }
-
-    private static ResponseStatusException badRequest(String message) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+                .orElseThrow(() -> new ApiException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
     }
 }

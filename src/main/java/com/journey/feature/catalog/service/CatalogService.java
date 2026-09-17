@@ -1,5 +1,7 @@
 package com.journey.feature.catalog.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.CatalogItemType;
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.LearningStatus;
@@ -34,10 +36,8 @@ import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -172,20 +172,19 @@ public class CatalogService {
         User learner = access.requireRole(UserRole.LEARNER);
         User reviewer = reviewerOf(learner);
         if (reviewer == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "You don't have a senior or a manager yet, so nobody could review your work. Ask HR to set one.");
+            throw new ApiException(ErrorCode.NO_REVIEWER);
         }
         CatalogItemType type;
         try {
             type = CatalogItemType.fromCode(req.type());
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown catalog type: " + req.type());
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, req.type());
         }
 
         if (type == CatalogItemType.JOURNEY) {
             JourneyDto journey = journeyService.getById(req.id());
             if (learnerJourneyService.findActiveAssignment(journey.id(), learner.getId()).isPresent()) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "You are already enrolled in this journey.");
+                throw new ApiException(ErrorCode.ALREADY_ENROLLED);
             }
             LearnerJourney lj = learnerJourneyService.createAssignment(journey.id(), learner, reviewer, true);
             events.publishEvent(new SelfEnrolledEvent(learner.getId(), learner.getName(), reviewer.getId(),
@@ -195,7 +194,7 @@ public class CatalogService {
 
         PackageDto pkg = packageService.get(req.id());
         if (packageAssignmentService.findActiveAssignment(pkg.id(), learner.getId()).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "You are already enrolled in this package.");
+            throw new ApiException(ErrorCode.PACKAGE_ALREADY_ENROLLED);
         }
         PackageAssignment pa = packageAssignmentService.enrollSelf(pkg.id(), learner, reviewer);
         PackageAssignmentDto summary = packageAssignmentService.toSummary(pa);

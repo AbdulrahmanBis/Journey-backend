@@ -1,6 +1,8 @@
 package com.journey.config;
 
+import com.journey.common.error.ErrorCode;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +45,18 @@ public class JwtUtil {
 
     public String extractUserId(String token) {
         return extractClaims(token).getSubject();
+    }
+
+    /** Null when the token is usable; otherwise why not — expired, or not a token we signed. */
+    public ErrorCode rejectionOf(String token) {
+        try {
+            extractClaims(token);
+            return null;
+        } catch (ExpiredJwtException e) {
+            return ErrorCode.SESSION_EXPIRED;
+        } catch (Exception e) {
+            return ErrorCode.AUTH_REQUIRED;
+        }
     }
 
     public boolean isTokenValid(String token) {

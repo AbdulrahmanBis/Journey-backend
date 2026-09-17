@@ -1,5 +1,7 @@
 package com.journey.feature.learnerJourney.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.UserRole;
 import com.journey.common.security.AccessPolicy;
@@ -32,9 +34,7 @@ import com.journey.feature.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -92,15 +92,13 @@ public class LearnerJourneyService {
         User actor = access.requireRole(AccessPolicy.STAFF);
         User learner = access.requireViewable(req.learnerId());
         if (!AccessPolicy.hasRole(learner, UserRole.LEARNER)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    learner.getName() + " is not a Learner.");
+            throw new ApiException(ErrorCode.NOT_A_LEARNER, learner.getName());
         }
         journeyService.getEntityById(req.journeyId()); // 404 for an unknown journey, before any writes
 
         // A cancelled assignment doesn't count: the journey can be given again, starting fresh.
         if (findActiveAssignment(req.journeyId(), req.learnerId()).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This learner is already assigned to that journey.");
+            throw new ApiException(ErrorCode.ALREADY_ASSIGNED);
         }
 
         requireNotPast(req.dueDate());
@@ -192,7 +190,7 @@ public class LearnerJourneyService {
     /** A new deadline can't already have passed. */
     public static void requireNotPast(LocalDate dueDate) {
         if (dueDate != null && dueDate.isBefore(LocalDate.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The due date can't be in the past.");
+            throw new ApiException(ErrorCode.DUE_DATE_IN_PAST);
         }
     }
 
@@ -257,14 +255,13 @@ public class LearnerJourneyService {
         User actor = access.actor();
         User learner = learnerOf(item);
         if (!actor.getId().equals(learner.getId()) && !access.isReviewerOf(actor, learner)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot change this learner's progress.");
+            throw new ApiException(ErrorCode.PROGRESS_NOT_ALLOWED);
         }
         ItemStatus status = resolveStatus(req.status());
 
         if (status == ItemStatus.COMPLETED
                 && (req.timeSpentHours() == null || req.timeSpentHours() <= 0)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "timeSpentHours is required when marking an item completed.");
+            throw new ApiException(ErrorCode.TIME_SPENT_REQUIRED);
         }
 
         item.setStatus(status.getCode());
@@ -613,7 +610,7 @@ public class LearnerJourneyService {
         try {
             return ItemStatus.fromCode(code);
         } catch (IllegalArgumentException | NullPointerException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown status code: " + code);
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
         }
     }
 
@@ -621,18 +618,16 @@ public class LearnerJourneyService {
     private User learnerOf(LearnerJourneyItem item) {
         String learnerId = findLjOrThrow(item.getLearnerJourneyId()).getLearnerId();
         return userRepository.findById(learnerId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Learner not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 
     private LearnerJourney findLjOrThrow(String id) {
         return learnerJourneyRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "LearnerJourney not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.ASSIGNMENT_NOT_FOUND));
     }
 
     private LearnerJourneyItem findLjiOrThrow(String id) {
         return learnerJourneyItemRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "LearnerJourneyItem not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.ITEM_PROGRESS_NOT_FOUND));
     }
 }

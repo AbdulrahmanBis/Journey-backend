@@ -1,5 +1,7 @@
 package com.journey.common.enums;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.dto.EnumValueDto;
 
 import java.util.Arrays;
@@ -43,13 +45,13 @@ public enum UserRole{
         return Arrays.stream(values())
                 .filter(r -> r.code == code)
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown role: " + code));
+                .orElseThrow(() -> new ApiException(ErrorCode.UNKNOWN_CODE, code));
     }
     public static UserRole fromEnglish(String english) {
         return Arrays.stream(values())
                 .filter(role -> role.getEnglish().equalsIgnoreCase(english))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown role: " + english));
+                .orElseThrow(() -> new ApiException(ErrorCode.UNKNOWN_CODE, english));
     }
 
     public EnumValueDto toDto() {

@@ -1,13 +1,13 @@
 package com.journey.common.storage;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -79,11 +79,10 @@ public class LocalDiskStorageService implements StorageService {
     @Override
     public StoredFile store(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No file supplied.");
+            throw new ApiException(ErrorCode.FILE_REQUIRED);
         }
         if (file.getSize() > maxBytes) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
-                    "File is larger than the " + (maxBytes / 1024 / 1024) + "MB limit.");
+            throw new ApiException(ErrorCode.FILE_TOO_LARGE, maxBytes / 1024 / 1024);
         }
 
         String mime = file.getContentType() == null
@@ -91,8 +90,7 @@ public class LocalDiskStorageService implements StorageService {
                 : file.getContentType().toLowerCase(Locale.ROOT).split(";")[0].trim();
         String ext = ALLOWED.get(mime);
         if (ext == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unsupported file type: " + (mime.isEmpty() ? "unknown" : mime));
+            throw new ApiException(ErrorCode.FILE_TYPE_NOT_ALLOWED, mime.isEmpty() ? "?" : mime);
         }
 
         LocalDate today = LocalDate.now();
@@ -107,7 +105,7 @@ public class LocalDiskStorageService implements StorageService {
             }
         } catch (IOException e) {
             log.error("Failed writing upload to {}", target, e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not store the file.");
+            throw new ApiException(ErrorCode.FILE_STORE_FAILED);
         }
 
         return new StoredFile(key, sanitizeName(file.getOriginalFilename()), mime, file.getSize());
@@ -117,7 +115,7 @@ public class LocalDiskStorageService implements StorageService {
     public Resource load(String storageKey) {
         Path path = resolve(storageKey);
         if (!Files.isReadable(path)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found.");
+            throw new ApiException(ErrorCode.FILE_NOT_FOUND);
         }
         return new FileSystemResource(path);
     }
@@ -127,7 +125,7 @@ public class LocalDiskStorageService implements StorageService {
         try {
             return Files.size(resolve(storageKey));
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found.");
+            throw new ApiException(ErrorCode.FILE_NOT_FOUND);
         }
     }
 
@@ -146,11 +144,11 @@ public class LocalDiskStorageService implements StorageService {
      */
     private Path resolve(String storageKey) {
         if (storageKey == null || !KEY_PATTERN.matcher(storageKey).matches()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Malformed file key.");
+            throw new ApiException(ErrorCode.FILE_KEY_INVALID);
         }
         Path path = root.resolve(storageKey).normalize();
         if (!path.startsWith(root)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Malformed file key.");
+            throw new ApiException(ErrorCode.FILE_KEY_INVALID);
         }
         return path;
     }

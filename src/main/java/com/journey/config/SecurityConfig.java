@@ -1,5 +1,6 @@
 package com.journey.config;
 
+import com.journey.common.error.SecurityErrorHandlers;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +26,7 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final CorsConfig corsConfig;
+    private final SecurityErrorHandlers errorHandlers;
 
     /**
      * File delivery. Matched on the raw URI, the same way {@link JwtAuthFilter} decides where a
@@ -65,8 +67,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
+                        // The container error page; it only renders the error body (see ApiErrorController).
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(errorHandlers)
+                        .accessDeniedHandler(errorHandlers))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

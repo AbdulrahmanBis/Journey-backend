@@ -15,7 +15,7 @@ public interface StorageService {
     /**
      * Persists the upload and returns its metadata.
      *
-     * @throws org.springframework.web.server.ResponseStatusException 400 when the type or size is
+     * @throws com.journey.common.error.ApiException 400 when the type or size is
      *         not allowed — callers should not have to pre-validate.
      */
     StoredFile store(MultipartFile file);

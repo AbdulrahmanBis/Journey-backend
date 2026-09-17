@@ -1,5 +1,7 @@
 package com.journey.feature.notification.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import com.journey.common.enums.NotificationChannel;
@@ -16,9 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -77,12 +77,12 @@ public class NotificationService {
     @Transactional
     public NotificationDto markRead(String id, String recipientId, String language) {
         Notification notification = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Notification not found"));
+                .orElseThrow(() -> new ApiException(ErrorCode.NOTIFICATION_NOT_FOUND));
 
         // Not found rather than forbidden: whether someone else's notification exists is not the
         // caller's business.
         if (!notification.getRecipientId().equals(recipientId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Notification not found");
+            throw new ApiException(ErrorCode.NOTIFICATION_NOT_FOUND);
         }
 
         if (notification.getReadAt() == null) {

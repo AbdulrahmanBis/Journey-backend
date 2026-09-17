@@ -1,5 +1,7 @@
 package com.journey.feature.team.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.AttentionType;
 import com.journey.common.enums.ExamAttemptStatus;
 import com.journey.common.enums.ItemStatus;
@@ -30,9 +32,7 @@ import com.journey.feature.team.dto.TeamOverviewDto;
 import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -134,7 +134,7 @@ public class TeamService {
         User actor = access.actor();
         User learner = access.requireViewable(learnerId);
         if (!AccessPolicy.hasRole(learner, UserRole.LEARNER)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, learner.getName() + " is not a Learner.");
+            throw new ApiException(ErrorCode.NOT_A_LEARNER, learner.getName());
         }
         Snapshot snapshot = load(List.of(learner));
         List<AttentionItemDto> attention = attentionFor(learner, snapshot, !AccessPolicy.hasRole(actor, UserRole.SENIOR, UserRole.LEARNER));

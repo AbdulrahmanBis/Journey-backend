@@ -1,5 +1,7 @@
 package com.journey.common.enums;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.dto.EnumValueDto;
 import lombok.Getter;
 
@@ -24,7 +26,7 @@ public enum CatalogItemType {
         for (CatalogItemType type : values()) {
             if (type.code == code) return type;
         }
-        throw new IllegalArgumentException("Unknown code: " + code);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
     }
 
     public EnumValueDto toDto() {

@@ -4,6 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import com.journey.common.error.ErrorCode;
+import com.journey.common.error.SecurityErrorHandlers;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -27,7 +29,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
 
         if (token != null) {
-            if (jwtUtil.isTokenValid(token)) {
+            ErrorCode rejection = jwtUtil.rejectionOf(token);
+            if (rejection != null) {
+                // Left unauthenticated; the entry point tells the client why, so it can say "session expired".
+                request.setAttribute(SecurityErrorHandlers.TOKEN_REJECTION, rejection);
+            } else {
                 String userId = jwtUtil.extractUserId(token);
                 Object roleClaim = jwtUtil.extractClaims(token).get("role");
                 String role = roleClaim != null ? roleClaim.toString().toUpperCase() : "LEARNER";

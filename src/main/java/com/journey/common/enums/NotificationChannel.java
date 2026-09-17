@@ -1,5 +1,7 @@
 package com.journey.common.enums;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.dto.EnumValueDto;
 import lombok.Getter;
 
@@ -41,7 +43,7 @@ public enum NotificationChannel {
                 return channel;
             }
         }
-        throw new IllegalArgumentException("Unknown notification channel code: " + code);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
     }
 
     /**

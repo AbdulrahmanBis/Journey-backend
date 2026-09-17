@@ -1,5 +1,7 @@
 package com.journey.feature.user.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.UserRole;
 import com.journey.common.security.AccessPolicy;
 import com.journey.common.service.IdGeneratorService;
@@ -12,11 +14,9 @@ import com.journey.feature.user.dto.UserDto;
 import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -57,13 +57,13 @@ public class UserService {
 
         if (AccessPolicy.hasRole(actor, UserRole.SENIOR)) {
             if (seniorId != null && !seniorId.equals(actor.getId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "A Senior can only list their own learners.");
+                throw new ApiException(ErrorCode.OWN_LEARNERS_ONLY);
             }
             List<User> learners = userRepository.findByRoleAndSeniorId(UserRole.LEARNER.getCode(), actor.getId());
             return toDtos(learners.stream().filter(u -> role == null || matches(u, role)).toList());
         }
         if (!AccessPolicy.hasRole(actor, AccessPolicy.USER_ADMINS)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Your role cannot list people.");
+            throw new ApiException(ErrorCode.ROLE_NOT_ALLOWED);
         }
 
         String scope = access.departmentScope(departmentId);
@@ -87,7 +87,7 @@ public class UserService {
     /** Internal — returns the entity (AuthService needs the password hash). No access check. */
     public User getEntityByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 
     // ─── Mutations ────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ public class UserService {
         access.requireCanAssign(role, req.departmentId());
 
         if (userRepository.existsByEmail(req.email())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists.");
+            throw new ApiException(ErrorCode.EMAIL_TAKEN);
         }
 
         String seniorId = role == UserRole.LEARNER ? blankToNull(req.seniorId()) : null;
@@ -126,7 +126,7 @@ public class UserService {
     public User createSelfServiceLearner(String name, String email, String password, String departmentId) {
         requireDepartment(departmentId);
         if (userRepository.existsByEmail(email)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists.");
+            throw new ApiException(ErrorCode.EMAIL_TAKEN);
         }
         return userRepository.save(User.builder()
                 .id(idGenerator.next(IdGeneratorService.USER, "u-"))
@@ -158,15 +158,14 @@ public class UserService {
         if (AccessPolicy.hasRole(user, UserRole.SENIOR) && (departmentChanges || newRole != UserRole.SENIOR)) {
             int learners = userRepository.findByRoleAndSeniorId(UserRole.LEARNER.getCode(), user.getId()).size();
             if (learners > 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        user.getName() + " still has " + learners + " learner(s). Reassign them first.");
+                throw new ApiException(ErrorCode.USER_HAS_LEARNERS, user.getName(), learners);
             }
         }
 
         if (req.name() != null) user.setName(req.name());
         if (req.email() != null && !req.email().equalsIgnoreCase(user.getEmail())) {
             if (userRepository.existsByEmail(req.email())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists.");
+                throw new ApiException(ErrorCode.EMAIL_TAKEN);
             }
             user.setEmail(req.email());
         }
@@ -196,7 +195,7 @@ public class UserService {
         User user = findOrThrow(id);
         access.requireCanManageAccount(user);
         if (user.getId().equals(access.actor().getId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "You cannot delete your own account.");
+            throw new ApiException(ErrorCode.DELETE_OWN_ACCOUNT);
         }
         userRepository.delete(user);
     }
@@ -205,7 +204,7 @@ public class UserService {
     @Transactional
     public void updateIntroSeenVersion(String id, Integer version) {
         if (version == null || version < 1) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "version must be a positive number.");
+            throw new ApiException(ErrorCode.INVALID_PARAMETER, "version");
         }
         User user = findOrThrow(id);
         user.setIntroSeenVersion(version);
@@ -220,8 +219,7 @@ public class UserService {
     public void updatePreferredLanguage(String id, String language) {
         String tag = language == null ? "" : language.trim().toLowerCase();
         if (!tag.equals("en") && !tag.equals("ar")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unsupported language: " + language + ". Expected \"en\" or \"ar\".");
+            throw new ApiException(ErrorCode.UNSUPPORTED_LANGUAGE);
         }
         User user = findOrThrow(id);
         user.setPreferredLanguage(tag);
@@ -256,13 +254,13 @@ public class UserService {
         try {
             return UserRole.fromCode(code);
         } catch (IllegalArgumentException | NullPointerException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role code: " + code);
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
         }
     }
 
     private void requireDepartment(String departmentId) {
         if (departmentId == null || departmentId.isBlank() || !departmentRepository.existsById(departmentId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown department: " + departmentId);
+            throw new ApiException(ErrorCode.UNKNOWN_DEPARTMENT);
         }
     }
 
@@ -270,13 +268,12 @@ public class UserService {
     private void requireValidSenior(String seniorId, String departmentId) {
         if (seniorId == null) return;
         User senior = userRepository.findById(seniorId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown senior: " + seniorId));
+                .orElseThrow(() -> new ApiException(ErrorCode.UNKNOWN_SENIOR));
         if (!AccessPolicy.hasRole(senior, UserRole.SENIOR)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, senior.getName() + " is not a Senior.");
+            throw new ApiException(ErrorCode.NOT_A_SENIOR, senior.getName());
         }
         if (!Objects.equals(senior.getDepartmentId(), departmentId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    senior.getName() + " is in a different department.");
+            throw new ApiException(ErrorCode.SENIOR_OTHER_DEPARTMENT, senior.getName());
         }
     }
 
@@ -290,6 +287,6 @@ public class UserService {
 
     private User findOrThrow(String id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 }

@@ -1,5 +1,7 @@
 package com.journey.common.enums;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.dto.EnumValueDto;
 import lombok.Getter;
 
@@ -39,7 +41,7 @@ public enum ExamQuestionType {
                 return type;
             }
         }
-        throw new IllegalArgumentException("Unknown exam question type code: " + code);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
     }
 
     public static ExamQuestionType fromEnglish(String english) {
@@ -48,7 +50,7 @@ public enum ExamQuestionType {
                 return type;
             }
         }
-        throw new IllegalArgumentException("Unknown exam question type: " + english);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, english);
     }
 
     public static ExamQuestionType fromArabic(String arabic) {
@@ -57,6 +59,6 @@ public enum ExamQuestionType {
                 return type;
             }
         }
-        throw new IllegalArgumentException("Unknown exam question type: " + arabic);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, arabic);
     }
 }

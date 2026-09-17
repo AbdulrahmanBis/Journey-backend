@@ -1,5 +1,7 @@
 package com.journey.feature.file.controller;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.security.AccessPolicy;
 import com.journey.common.storage.LocalDiskStorageService;
 import com.journey.common.storage.StorageService;
@@ -14,7 +16,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.HandlerMapping;
 
 import java.io.IOException;
@@ -162,7 +163,7 @@ public class FileController {
         int idx = path.indexOf("/api/files/");
         String key = idx >= 0 ? path.substring(idx + "/api/files/".length()) : "";
         if (key.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No file key supplied.");
+            throw new ApiException(ErrorCode.FILE_KEY_INVALID);
         }
         return key;
     }

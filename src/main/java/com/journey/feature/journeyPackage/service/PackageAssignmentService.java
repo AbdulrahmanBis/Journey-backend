@@ -1,5 +1,7 @@
 package com.journey.feature.journeyPackage.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.UserRole;
 import com.journey.common.security.AccessPolicy;
@@ -23,10 +25,8 @@ import com.journey.feature.learnerJourney.service.LearnerJourneyService;
 import com.journey.feature.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -112,7 +112,7 @@ public class PackageAssignmentService {
         User actor = access.requireRole(AccessPolicy.STAFF);
         User learner = access.requireViewable(req.learnerId());
         if (!AccessPolicy.hasRole(learner, UserRole.LEARNER)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, learner.getName() + " is not a Learner.");
+            throw new ApiException(ErrorCode.NOT_A_LEARNER, learner.getName());
         }
         LearnerJourneyService.requireNotPast(req.dueDate());
         return toDto(createAssignment(packageService.requirePackage(req.packageId()), learner, actor, false, req.dueDate()));
@@ -137,10 +137,10 @@ public class PackageAssignmentService {
                 : pkg.getTargetDays() == null ? null : LocalDate.now().plusDays(pkg.getTargetDays());
         List<PackageJourney> definition = packageService.journeysOf(pkg.getId());
         if (definition.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This package has no journeys.");
+            throw new ApiException(ErrorCode.PACKAGE_EMPTY);
         }
         if (assignmentRepository.existsByPackageIdAndLearnerIdAndCancelledAtIsNull(pkg.getId(), learner.getId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This learner already has that package.");
+            throw new ApiException(ErrorCode.PACKAGE_ALREADY_ASSIGNED);
         }
 
         PackageAssignment pa = assignmentRepository.save(PackageAssignment.builder()
@@ -288,6 +288,6 @@ public class PackageAssignmentService {
 
     private PackageAssignment requireAssignment(String id) {
         return assignmentRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Package assignment not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.PACKAGE_ASSIGNMENT_NOT_FOUND));
     }
 }

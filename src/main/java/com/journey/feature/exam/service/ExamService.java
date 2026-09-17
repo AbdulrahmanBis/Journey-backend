@@ -1,5 +1,7 @@
 package com.journey.feature.exam.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 
 import com.journey.common.enums.ExamAttemptStatus;
 import com.journey.common.enums.ExamQuestionType;
@@ -12,15 +14,17 @@ import com.journey.feature.exam.dto.*;
 import com.journey.feature.exam.entity.*;
 import com.journey.feature.exam.repository.*;
 import com.journey.feature.learnerJourney.entity.LearnerJourney;
+import com.journey.common.enums.ItemStatus;
+import com.journey.feature.journey.repository.JourneyRepository;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyRepository;
+import com.journey.feature.learnerJourney.service.LearnerJourneyService;
+import org.springframework.beans.factory.ObjectProvider;
 import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -45,6 +49,9 @@ public class ExamService {
     private final LearnerJourneyRepository learnerJourneyRepository;
     private final UserRepository userRepository;
     private final AccessPolicy access;
+    private final JourneyRepository journeyRepository;
+    // LearnerJourneyService depends on this service, so it is looked up lazily.
+    private final ObjectProvider<LearnerJourneyService> learnerJourneys;
 
     /** Option choices are 1001-based codes, matching every other enum-ish value in the system. */
     public static final int OPTION_CODE_BASE = 1001;
@@ -96,6 +103,15 @@ public class ExamService {
     @Transactional
     public ExamDto saveExam(String journeyId, SaveExamRequest req) {
         User author = access.requireRole(AccessPolicy.STAFF);
+        if (!journeyRepository.existsById(journeyId)) {
+            throw new ApiException(ErrorCode.JOURNEY_NOT_FOUND);
+        }
+        List<QuestionDraftDto> drafts = req.questions() == null ? List.of()
+                : req.questions().stream().filter(Objects::nonNull).toList();
+        if (drafts.isEmpty()) {
+            throw new ApiException(ErrorCode.EXAM_NEEDS_QUESTION);
+        }
+        drafts.forEach(ExamService::validateQuestion);
 
         Exam exam = examRepository.findByJourneyId(journeyId).orElse(null);
 
@@ -129,7 +145,7 @@ public class ExamService {
         Map<String, ExamQuestion> existingById = existing.stream()
                 .collect(Collectors.toMap(ExamQuestion::getId, Function.identity()));
 
-        Set<String> keptIds = req.questions().stream()
+        Set<String> keptIds = drafts.stream()
                 .map(QuestionDraftDto::id)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
@@ -142,21 +158,21 @@ public class ExamService {
 
         int order = 1;
 
-        for (QuestionDraftDto q : req.questions()) {
+        for (QuestionDraftDto q : drafts) {
 
             ExamQuestion question = q.id() != null ? existingById.get(q.id()) : null;
 
+            // An id that is not on this exam is treated as new, never adopted: otherwise it could take over a
+            // question that belongs to another exam.
             if (question == null) {
                 question = new ExamQuestion();
-                question.setId(q.id() != null
-                        ? q.id()
-                        : idGenerator.next(IdGeneratorService.EXAM_QUESTION, "eq-"));
+                question.setId(idGenerator.next(IdGeneratorService.EXAM_QUESTION, "eq-"));
             }
 
             question.setExamId(exam.getId());
             question.setQuestionOrder(order++);
             question.setQuestionType(resolveQuestionType(q.type()).getCode());
-            question.setPrompt(q.prompt());
+            question.setPrompt(q.prompt().trim());
             question.setOption1(q.options() != null && q.options().size() > 0 ? q.options().get(0) : null);
             question.setOption2(q.options() != null && q.options().size() > 1 ? q.options().get(1) : null);
             question.setOption3(q.options() != null && q.options().size() > 2 ? q.options().get(2) : null);
@@ -175,10 +191,7 @@ public class ExamService {
         access.requireRole(AccessPolicy.STAFF);
 
         Exam exam = examRepository.findByJourneyId(journeyId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Exam not found."
-                ));
+                .orElseThrow(() -> new ApiException(ErrorCode.EXAM_NOT_FOUND));
 
         examQuestionRepository.deleteByExamId(exam.getId());
 
@@ -251,17 +264,28 @@ public class ExamService {
 
         // Only the learner sits their own exam.
         if (!learnerOf(learnerJourneyId).getId().equals(access.actor().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the learner can submit this exam.");
+            throw new ApiException(ErrorCode.LEARNER_ONLY);
+        }
+        LearnerJourney lj = learnerJourneyRepository.findById(learnerJourneyId)
+                .orElseThrow(() -> new ApiException(ErrorCode.ASSIGNMENT_NOT_FOUND));
+        if (lj.getStatus() == ItemStatus.CANCELLED.getCode()) {
+            throw new ApiException(ErrorCode.JOURNEY_CANCELLED);
         }
 
-        Exam exam = examRepository.findById(req.examId())
-                .orElseThrow(() ->
-                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found."));
+        // The exam is the one on this learner's journey, whatever examId the client sent.
+        Exam exam = examRepository.findByJourneyId(lj.getJourneyId())
+                .orElseThrow(() -> new ApiException(ErrorCode.EXAM_NOT_FOUND));
+        if (req.examId() != null && !req.examId().equals(exam.getId())) {
+            throw new ApiException(ErrorCode.EXAM_NOT_FOUND);
+        }
+        // Agreed rule: the final exam opens once every unit's items and quiz are done.
+        if (!learnerJourneys.getObject().allUnitsReady(lj)) {
+            throw new ApiException(ErrorCode.EXAM_LOCKED);
+        }
 
         // One attempt per learner-journey — the contract promises 409 on a repeat submit.
         if (examAttemptRepository.findByLearnerJourneyId(learnerJourneyId).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This exam has already been submitted.");
+            throw new ApiException(ErrorCode.EXAM_ALREADY_SUBMITTED);
         }
 
         ExamAttempt attempt = ExamAttempt.builder()
@@ -282,14 +306,24 @@ public class ExamService {
                         ExamQuestion::getId,
                         Function.identity()));
 
-        for (AnswerDraftDto dto : req.answers()) {
+        List<AnswerDraftDto> answers = req.answers() == null ? List.of()
+                : req.answers().stream().filter(Objects::nonNull).toList();
+        Set<String> answered = new java.util.HashSet<>();
+        for (AnswerDraftDto dto : answers) {
+            if (dto.questionId() == null || !questionMap.containsKey(dto.questionId())) {
+                throw new ApiException(ErrorCode.EXAM_UNKNOWN_QUESTION);
+            }
+            if (!answered.add(dto.questionId()) || !isAnswered(questionMap.get(dto.questionId()), dto)) {
+                throw new ApiException(ErrorCode.EXAM_ANSWER_ALL);
+            }
+        }
+        if (answered.size() != questions.size()) {
+            throw new ApiException(ErrorCode.EXAM_ANSWER_ALL);
+        }
+
+        for (AnswerDraftDto dto : answers) {
 
             ExamQuestion q = questionMap.get(dto.questionId());
-
-            if (q == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Answer refers to a question that is not on this exam: " + dto.questionId());
-            }
 
             Boolean markedCorrect = null;
 
@@ -331,30 +365,35 @@ public class ExamService {
 
         ExamAttempt attempt = examAttemptRepository.findById(attemptId)
                 .orElseThrow(() ->
-                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found."));
+                        new ApiException(ErrorCode.EXAM_ATTEMPT_NOT_FOUND));
 
         // A reviewer who can see the learner — never the learner grading themselves.
         User grader = access.actor();
         if (!access.isReviewerOf(grader, learnerOf(attempt.getLearnerJourneyId()))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot grade this exam.");
+            throw new ApiException(ErrorCode.EXAM_GRADE_NOT_ALLOWED);
         }
 
         List<ExamAnswer> answers =
                 examAnswerRepository.findByAttemptId(attemptId);
 
         if (answers.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "This attempt has no answers to grade.");
+            throw new ApiException(ErrorCode.EXAM_NOTHING_TO_GRADE);
+        }
+        if (req.passed() == null) {
+            throw new ApiException(ErrorCode.EXAM_RESULT_REQUIRED);
         }
 
+        // The last mark wins when a question is marked twice; marks without a question are ignored.
         Map<String, QuestionMarkDto> marks =
                 req.marks() == null
                         ? Map.of()
                         : req.marks()
                         .stream()
+                        .filter(m -> m != null && m.questionId() != null)
                         .collect(Collectors.toMap(
                                 QuestionMarkDto::questionId,
-                                Function.identity()));
+                                Function.identity(),
+                                (first, second) -> second));
 
         int correct = 0;
 
@@ -397,12 +436,44 @@ public class ExamService {
         return getAttempt(attempt.getLearnerJourneyId());
     }
 
+    /** A question the author can save: a prompt, and a correct answer that fits its type. */
+    private static void validateQuestion(QuestionDraftDto q) {
+        if (q.prompt() == null || q.prompt().isBlank()) {
+            throw new ApiException(ErrorCode.QUESTION_PROMPT_REQUIRED);
+        }
+        if (q.type() == null) {
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, "null");
+        }
+        ExamQuestionType type = ExamQuestionType.fromCode(q.type());
+        if (type == ExamQuestionType.MULTIPLE_CHOICE) {
+            long options = q.options() == null ? 0 : q.options().stream().filter(o -> o != null && !o.isBlank()).count();
+            if (options < 2 || options > MAX_OPTIONS || q.options().size() != options) {
+                throw new ApiException(ErrorCode.QUESTION_OPTION_COUNT);
+            }
+            Integer correct = q.correctOptionIndex();
+            if (correct == null || correct < OPTION_CODE_BASE || correct >= OPTION_CODE_BASE + options) {
+                throw new ApiException(ErrorCode.QUESTION_CORRECT_OPTION, q.prompt().trim());
+            }
+        } else if (type == ExamQuestionType.YES_NO && q.correctBoolAnswer() == null) {
+            throw new ApiException(ErrorCode.QUESTION_CORRECT_YES_NO, q.prompt().trim());
+        }
+    }
+
+    /** Whether the learner gave an answer of the kind this question takes. */
+    private static boolean isAnswered(ExamQuestion q, AnswerDraftDto a) {
+        return switch (ExamQuestionType.fromCode(q.getQuestionType())) {
+            case MULTIPLE_CHOICE -> a.selectedOptionIndex() != null;
+            case YES_NO -> a.boolAnswer() != null;
+            case OPEN -> a.openText() != null && !a.openText().isBlank();
+        };
+    }
+
     /** The learner a learner-journey belongs to. */
     private User learnerOf(String learnerJourneyId) {
         LearnerJourney lj = learnerJourneyRepository.findById(learnerJourneyId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Learner journey not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.ASSIGNMENT_NOT_FOUND));
         return userRepository.findById(lj.getLearnerId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Learner not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 
     private ExamAnswerDto toAnswerDto(ExamAnswer answer) {
@@ -423,9 +494,7 @@ public class ExamService {
     private Integer validOptionCode(Integer code) {
         if (code == null) return null;
         if (code < OPTION_CODE_BASE || code >= OPTION_CODE_BASE + MAX_OPTIONS) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Option code must be between " + OPTION_CODE_BASE + " and "
-                            + (OPTION_CODE_BASE + MAX_OPTIONS - 1) + ", got: " + code);
+            throw new ApiException(ErrorCode.EXAM_OPTION_OUT_OF_RANGE);
         }
         return code;
     }
@@ -435,8 +504,7 @@ public class ExamService {
         try {
             return ExamQuestionType.fromCode(code);
         } catch (IllegalArgumentException | NullPointerException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unknown question type code: " + code);
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
         }
     }
 }

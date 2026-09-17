@@ -1,5 +1,7 @@
 package com.journey.feature.learnerJourney.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.ExamQuestionType;
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.UserRole;
@@ -27,10 +29,8 @@ import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
@@ -215,7 +215,7 @@ public class LearnerUnitService {
     @Transactional
     public void addTime(String progressId, Integer seconds) {
         if (seconds == null || seconds < 1) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "seconds must be a positive number.");
+            throw new ApiException(ErrorCode.INVALID_PARAMETER, "seconds");
         }
         LearnerJourneyItem p = ownProgress(progressId);
         double added = Math.min(seconds, MAX_HEARTBEAT_SECONDS) / 3600.0;
@@ -242,11 +242,11 @@ public class LearnerUnitService {
         LearnerJourney lj = journey(row.getLearnerJourneyId());
         requireLearner(lj);
         if (row.getStatus() == ItemStatus.COMPLETED.getCode() || row.getStatus() == ItemStatus.CANCELLED.getCode()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This unit is closed.");
+            throw new ApiException(ErrorCode.UNIT_CLOSED);
         }
         List<UnitQuizQuestion> questions = journeyService.getQuizForUnit(row.getUnitId());
         if (questions.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "This unit has no quiz.");
+            throw new ApiException(ErrorCode.UNIT_NO_QUIZ);
         }
         Map<String, SubmitQuizRequest.Answer> answers = req.answers().stream()
                 .collect(Collectors.toMap(SubmitQuizRequest.Answer::questionId, Function.identity(), (a, b) -> b));
@@ -255,7 +255,7 @@ public class LearnerUnitService {
             SubmitQuizRequest.Answer a = answers.get(q.getId());
             boolean mc = q.getQuestionType() == ExamQuestionType.MULTIPLE_CHOICE.getCode();
             if (a == null || (mc ? a.selectedOptionIndex() == null : a.boolAnswer() == null)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Answer every question before submitting.");
+                throw new ApiException(ErrorCode.QUIZ_ANSWER_ALL);
             }
             if (isCorrect(q, a)) correct++;
         }
@@ -263,7 +263,7 @@ public class LearnerUnitService {
         try {
             row.setQuizAnswers(mapper.writeValueAsString(kept));
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save the answers.");
+            throw new ApiException(ErrorCode.INTERNAL);
         }
         row.setQuizScorePercent((int) Math.round(correct * 100.0 / questions.size()));
         row.setQuizSubmittedAt(LocalDateTime.now());
@@ -285,10 +285,10 @@ public class LearnerUnitService {
         LearnerJourney lj = journey(row.getLearnerJourneyId());
         requireLearner(lj);
         if (!learnerJourneyService.unitReady(lj, row.getUnitId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Finish every item and the quiz first.");
+            throw new ApiException(ErrorCode.UNIT_NOT_READY);
         }
         if (!learnerJourneyService.submitUnitIfReady(lj, row.getUnitId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This unit is already with your reviewer or closed.");
+            throw new ApiException(ErrorCode.UNIT_ALREADY_SUBMITTED);
         }
         return summary(unitRow(learnerUnitId));
     }
@@ -301,13 +301,13 @@ public class LearnerUnitService {
         User actor = access.actor();
         User learner = access.requireViewable(lj.getLearnerId());
         if (!access.isReviewerOf(actor, learner)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a reviewer can change a unit's status.");
+            throw new ApiException(ErrorCode.REVIEWER_ONLY);
         }
         ItemStatus status;
         try {
             status = ItemStatus.fromCode(statusCode);
         } catch (IllegalArgumentException | NullPointerException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown status code: " + statusCode);
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, statusCode);
         }
         boolean changed = row.getStatus() != status.getCode();
         row.setStatus(status.getCode());
@@ -404,10 +404,10 @@ public class LearnerUnitService {
 
     private void requireLearner(LearnerJourney lj) {
         if (!lj.getLearnerId().equals(access.actor().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the learner can do this.");
+            throw new ApiException(ErrorCode.LEARNER_ONLY);
         }
         if (lj.getStatus() == ItemStatus.CANCELLED.getCode()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This journey was cancelled.");
+            throw new ApiException(ErrorCode.JOURNEY_CANCELLED);
         }
     }
 
@@ -422,16 +422,16 @@ public class LearnerUnitService {
 
     private LearnerJourney journey(String id) {
         return learnerJourneyRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Learner journey not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.ASSIGNMENT_NOT_FOUND));
     }
 
     private LearnerJourneyItem progress(String id) {
         return itemRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item progress not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.ITEM_PROGRESS_NOT_FOUND));
     }
 
     private LearnerJourneyUnit unitRow(String id) {
         return unitRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unit progress not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.UNIT_PROGRESS_NOT_FOUND));
     }
 }

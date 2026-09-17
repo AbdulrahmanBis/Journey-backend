@@ -1,5 +1,7 @@
 package com.journey.feature.department.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.UserRole;
 import com.journey.common.security.AccessPolicy;
 import com.journey.common.service.IdGeneratorService;
@@ -9,10 +11,8 @@ import com.journey.feature.department.entity.Department;
 import com.journey.feature.department.repository.DepartmentRepository;
 import com.journey.feature.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -39,7 +39,7 @@ public class DepartmentService {
         String english = req.english().trim();
         String arabic = req.arabic().trim();
         if (departmentRepository.existsByNameEnIgnoreCase(english) || departmentRepository.existsByNameAr(arabic)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A department with that name already exists.");
+            throw new ApiException(ErrorCode.DEPARTMENT_NAME_TAKEN);
         }
         Department saved = departmentRepository.save(Department.builder()
                 .id(idGenerator.next(IdGeneratorService.DEPARTMENT, "dep-"))
@@ -57,7 +57,7 @@ public class DepartmentService {
         String arabic = req.arabic().trim();
         if (departmentRepository.existsByNameEnIgnoreCaseAndIdNot(english, id)
                 || departmentRepository.existsByNameArAndIdNot(arabic, id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A department with that name already exists.");
+            throw new ApiException(ErrorCode.DEPARTMENT_NAME_TAKEN);
         }
         department.setNameEn(english);
         department.setNameAr(arabic);
@@ -74,21 +74,20 @@ public class DepartmentService {
         Department department = findOrThrow(id);
         long members = userRepository.countByDepartmentId(id);
         if (members > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This department still has " + members + " member(s). Move them to another department first.");
+            throw new ApiException(ErrorCode.DEPARTMENT_HAS_MEMBERS, members);
         }
         departmentRepository.delete(department);
     }
 
     public Department findOrThrow(String id) {
         return departmentRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Department not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.DEPARTMENT_NOT_FOUND));
     }
 
     /** 400 rather than a foreign-key 500 when a client sends an id that does not exist. */
     public void requireExists(String id) {
         if (id == null || id.isBlank() || !departmentRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown department: " + id);
+            throw new ApiException(ErrorCode.UNKNOWN_DEPARTMENT);
         }
     }
 

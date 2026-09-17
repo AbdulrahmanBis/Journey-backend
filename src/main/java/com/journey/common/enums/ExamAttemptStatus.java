@@ -1,5 +1,7 @@
 package com.journey.common.enums;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.dto.EnumValueDto;
 import lombok.Getter;
 
@@ -26,7 +28,7 @@ public enum ExamAttemptStatus {
                 return status;
             }
         }
-        throw new IllegalArgumentException("Unknown exam attempt status code: " + code);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
     }
 
     public static ExamAttemptStatus fromEnglish(String english) {
@@ -35,7 +37,7 @@ public enum ExamAttemptStatus {
                 return status;
             }
         }
-        throw new IllegalArgumentException("Unknown exam attempt status: " + english);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, english);
     }
 
     public static ExamAttemptStatus fromArabic(String arabic) {
@@ -44,7 +46,7 @@ public enum ExamAttemptStatus {
                 return status;
             }
         }
-        throw new IllegalArgumentException("Unknown exam attempt status: " + arabic);
+        throw new ApiException(ErrorCode.UNKNOWN_CODE, arabic);
     }
 
     public EnumValueDto toDto() {

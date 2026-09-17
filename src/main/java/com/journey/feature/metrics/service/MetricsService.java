@@ -1,5 +1,7 @@
 package com.journey.feature.metrics.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.ExamAttemptStatus;
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.enums.UserRole;
@@ -13,9 +15,7 @@ import com.journey.feature.user.entity.User;
 import com.journey.feature.user.repository.UserRepository;
 import com.journey.common.security.AccessPolicy;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -47,7 +47,7 @@ public class MetricsService {
         access.requireRole(AccessPolicy.STAFF);
         User senior = access.requireViewable(seniorId);
         if (!AccessPolicy.hasRole(senior, UserRole.SENIOR)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, senior.getName() + " is not a Senior.");
+            throw new ApiException(ErrorCode.NOT_A_SENIOR, senior.getName());
         }
         List<User> learners = userRepository.findByRoleAndSeniorId(UserRole.LEARNER.getCode(), seniorId);
         return buildGroupMetrics(learners);

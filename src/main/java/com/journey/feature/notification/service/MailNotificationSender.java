@@ -1,5 +1,7 @@
 package com.journey.feature.notification.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.feature.notification.spi.RecipientDirectory;
 import com.journey.feature.notification.template.NotificationTemplate;
 import com.journey.feature.notification.template.TemplateRenderer;
@@ -121,19 +123,19 @@ public class MailNotificationSender {
      * so an Admin can check the SMTP settings without waiting for a real notification.
      *
      * @return the address it went to
-     * @throws IllegalStateException with a message fit to show, when email is off, not configured, or rejected
+     * @throws ApiException, when email is off, not configured, or rejected
      */
     public String sendTest(String userId) {
         if (!enabled) {
-            throw new IllegalStateException("Email is turned off. Set MAIL_ENABLED=true (app.notifications.mail.enabled) and restart.");
+            throw new ApiException(ErrorCode.MAIL_DISABLED);
         }
         if (mailSender.isEmpty()) {
-            throw new IllegalStateException("No mail server is configured. Set SMTP_HOST (app.mail.host) and restart.");
+            throw new ApiException(ErrorCode.MAIL_NOT_CONFIGURED);
         }
         RecipientDirectory.Recipient recipient = recipients.find(userId)
-                .orElseThrow(() -> new IllegalStateException("Your account could not be found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.ACCOUNT_GONE));
         if (recipient.email() == null || recipient.email().isBlank()) {
-            throw new IllegalStateException("Your account has no email address.");
+            throw new ApiException(ErrorCode.MAIL_NO_ADDRESS);
         }
         NotificationTemplate template = templates.get(TEST_TEMPLATE);
         String language = NotificationService.resolveLanguage(
@@ -148,7 +150,7 @@ public class MailNotificationSender {
             log.error("Test email to {} failed: {}", recipient.email(), e.getMessage());
             Throwable cause = e;
             while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
-            throw new IllegalStateException("The mail server did not accept the message: " + cause.getMessage());
+            throw new ApiException(ErrorCode.MAIL_REJECTED, String.valueOf(cause.getMessage()));
         }
         log.info("Test email sent to {}.", recipient.email());
         return recipient.email();

@@ -1,5 +1,7 @@
 package com.journey.feature.certificate.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.CatalogItemType;
 import com.journey.common.enums.ItemStatus;
 import com.journey.common.security.AccessPolicy;
@@ -25,10 +27,8 @@ import com.journey.feature.learnerJourney.repository.LearnerJourneyRepository;
 import com.journey.feature.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -171,7 +171,7 @@ public class CertificateService {
     @Transactional(readOnly = true)
     public CertificateDto get(String id) {
         Certificate certificate = certificates.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Certificate not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.CERTIFICATE_NOT_FOUND));
         User learner = access.requireViewable(certificate.getLearnerId());
         return toDto(certificate, learner);
     }

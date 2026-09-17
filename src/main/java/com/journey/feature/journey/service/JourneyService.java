@@ -1,5 +1,7 @@
 package com.journey.feature.journey.service;
 
+import com.journey.common.error.ApiException;
+import com.journey.common.error.ErrorCode;
 import com.journey.common.enums.AttachmentKind;
 import com.journey.common.security.AccessPolicy;
 import com.journey.feature.user.entity.User;
@@ -26,9 +28,7 @@ import com.journey.feature.journey.repository.JourneyItemRepository;
 import com.journey.feature.journey.repository.JourneyRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -184,7 +184,7 @@ public class JourneyService {
     private List<CreateJourneyRequest.UnitPayload> unitsOf(CreateJourneyRequest req, List<JourneyUnit> existing) {
         if (req.units() != null && !req.units().isEmpty()) return req.units();
         if (req.items() == null || req.items().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A journey needs at least one item.");
+            throw new ApiException(ErrorCode.JOURNEY_NEEDS_ITEM);
         }
         JourneyUnit first = existing.isEmpty() ? null : existing.get(0);
         return List.of(new CreateJourneyRequest.UnitPayload(
@@ -209,7 +209,7 @@ public class JourneyService {
      */
     private void saveStructure(String journeyId, List<CreateJourneyRequest.UnitPayload> units) {
         if (units.stream().allMatch(u -> u.items() == null || u.items().isEmpty())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A journey needs at least one item.");
+            throw new ApiException(ErrorCode.JOURNEY_NEEDS_ITEM);
         }
         Map<String, JourneyUnit> existingUnits = unitRepository.findByJourneyIdOrderByOrder(journeyId).stream()
                 .collect(Collectors.toMap(JourneyUnit::getId, u -> u));
@@ -231,8 +231,7 @@ public class JourneyService {
         for (int u = 0; u < units.size(); u++) {
             CreateJourneyRequest.UnitPayload payload = units.get(u);
             if (payload.items() == null || payload.items().isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Unit \"" + payload.title() + "\" needs at least one item.");
+                throw new ApiException(ErrorCode.UNIT_NEEDS_ITEM, payload.title());
             }
             JourneyUnit unit = payload.id() != null && existingUnits.containsKey(payload.id())
                     ? existingUnits.get(payload.id())
@@ -270,8 +269,7 @@ public class JourneyService {
     private void saveQuiz(String unitId, List<QuestionDraftDto> drafts) {
         List<QuestionDraftDto> questions = drafts == null ? List.of() : drafts;
         if (questions.size() > MAX_QUIZ_QUESTIONS) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "A unit quiz can have at most " + MAX_QUIZ_QUESTIONS + " questions.");
+            throw new ApiException(ErrorCode.QUIZ_TOO_MANY_QUESTIONS, MAX_QUIZ_QUESTIONS);
         }
         Map<String, UnitQuizQuestion> existing = quizRepository.findByUnitIdOrderByQuestionOrder(unitId).stream()
                 .collect(Collectors.toMap(UnitQuizQuestion::getId, q -> q));
@@ -282,26 +280,25 @@ public class JourneyService {
             try {
                 type = ExamQuestionType.fromCode(d.type());
             } catch (IllegalArgumentException | NullPointerException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown question type: " + d.type());
+                throw new ApiException(ErrorCode.UNKNOWN_CODE, d.type());
             }
             if (type == ExamQuestionType.OPEN) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Unit quizzes grade themselves, so they take multiple-choice or yes/no questions only.");
+                throw new ApiException(ErrorCode.QUIZ_OPEN_QUESTION);
             }
             if (d.prompt() == null || d.prompt().isBlank()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Every quiz question needs a prompt.");
+                throw new ApiException(ErrorCode.QUESTION_PROMPT_REQUIRED);
             }
             List<String> options = d.options() == null ? List.of() : d.options().stream().filter(o -> o != null && !o.isBlank()).toList();
             if (type == ExamQuestionType.MULTIPLE_CHOICE) {
                 if (options.size() < 2 || options.size() > 4) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A multiple-choice question needs 2 to 4 options.");
+                    throw new ApiException(ErrorCode.QUESTION_OPTION_COUNT);
                 }
                 Integer correct = d.correctOptionIndex();
                 if (correct == null || correct < ExamService.OPTION_CODE_BASE || correct >= ExamService.OPTION_CODE_BASE + options.size()) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick the correct option for \"" + d.prompt() + "\".");
+                    throw new ApiException(ErrorCode.QUESTION_CORRECT_OPTION, d.prompt());
                 }
             } else if (d.correctBoolAnswer() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick yes or no as the answer for \"" + d.prompt() + "\".");
+                throw new ApiException(ErrorCode.QUESTION_CORRECT_YES_NO, d.prompt());
             }
 
             UnitQuizQuestion q = d.id() != null && existing.containsKey(d.id())
@@ -364,16 +361,14 @@ public class JourneyService {
     private void validate(AttachmentKind kind, CreateJourneyRequest.AttachmentPayload p) {
         if (kind.isUploaded()) {
             if (p.storageKey() == null || p.storageKey().isBlank()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        kind.getEnglish() + " attachments need an uploaded file.");
+                throw new ApiException(ErrorCode.ATTACHMENT_FILE_REQUIRED, ApiException.text(kind.getEnglish(), kind.getArabic()));
             }
             return;
         }
 
         String url = p.url() == null ? "" : p.url().trim().toLowerCase(Locale.ROOT);
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    kind.getEnglish() + " attachments need an http or https URL.");
+            throw new ApiException(ErrorCode.ATTACHMENT_URL_INVALID, ApiException.text(kind.getEnglish(), kind.getArabic()));
         }
     }
 
@@ -381,7 +376,7 @@ public class JourneyService {
         try {
             return AttachmentKind.fromCode(code);
         } catch (IllegalArgumentException | NullPointerException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown attachment kind: " + code);
+            throw new ApiException(ErrorCode.UNKNOWN_CODE, code);
         }
     }
 
@@ -442,6 +437,6 @@ public class JourneyService {
 
     private Journey findOrThrow(String id) {
         return journeyRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Journey not found: " + id));
+                .orElseThrow(() -> new ApiException(ErrorCode.JOURNEY_NOT_FOUND));
     }
 }
