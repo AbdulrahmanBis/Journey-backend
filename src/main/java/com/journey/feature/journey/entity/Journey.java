@@ -32,6 +32,10 @@ public class Journey {
     @Column(name = "tech_tag")
     private String techTag;
 
+    /** Expected duration in days; becomes a default due date when assigned. Optional. */
+    @Column(name = "target_days")
+    private Integer targetDays;
+
     @Column(name = "created_by_id")
     private String createdById;
 

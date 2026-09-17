@@ -6,9 +6,12 @@ import lombok.Getter;
 @Getter
 public enum ItemStatus {
 
+    // Wording is display only; the codes are what is stored and compared.
     NEW(1001, "new", "جديد"),
-    REFLECT(1002, "reflect", "راجع"),
-    RESPONSE(1003, "response", "إجابة"),
+    /** The learner is working on it. */
+    REFLECT(1002, "in progress", "قيد التنفيذ"),
+    /** The learner is done and waiting for the reviewer. */
+    RESPONSE(1003, "waiting for review", "بانتظار المراجعة"),
     COMPLETED(1004, "completed", "مكتمل"),
     CANCELLED(1005, "cancelled", "ملغي");
 

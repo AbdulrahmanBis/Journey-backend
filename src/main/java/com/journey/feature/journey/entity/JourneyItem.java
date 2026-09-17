@@ -24,6 +24,9 @@ public class JourneyItem {
     @Column(name = "journey_id", nullable = false, length = 36)
     private String journeyId;
 
+    @Column(name = "unit_id", nullable = false, length = 36)
+    private String unitId;
+
     @Column(nullable = false)
     private String title;
 

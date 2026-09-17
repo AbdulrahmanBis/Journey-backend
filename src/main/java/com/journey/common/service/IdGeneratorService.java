@@ -16,9 +16,10 @@ import org.springframework.stereotype.Service;
  * match that exact shape (the seeded {@code ji-aws-1} / {@code eq-aws-1} style, or old UUIDs) are
  * ignored by the pattern, so they can never collide with what we generate.
  *
- * <p>Note: this is a read-then-write, so two concurrent inserts into the same table could race for
- * the same number. At this application's scale that is acceptable; if it ever matters, move to a
- * dedicated sequence table or a DB sequence.
+ * <p>Concurrency: reading MAX(id) alone races — two inserts that haven't committed yet both see the
+ * same maximum (notifications dispatched in parallel hit this). So the service also remembers the last
+ * number it issued per prefix and never goes below it, under a lock. That covers everything inside this
+ * JVM. Several backend instances writing to one database would still need a sequence table.
  */
 @Service
 @RequiredArgsConstructor
@@ -26,6 +27,9 @@ public class IdGeneratorService {
 
     @PersistenceContext
     private EntityManager entityManager;
+
+    /** Highest number handed out per table and prefix, including rows not committed yet. */
+    private final java.util.Map<String, Long> lastIssued = new java.util.HashMap<>();
 
     public static final String USER = "users";
     public static final String JOURNEY = "journeys";
@@ -41,13 +45,16 @@ public class IdGeneratorService {
     public static final String DEPARTMENT = "departments";
     public static final String PACKAGE = "packages";
     public static final String PACKAGE_ASSIGNMENT = "package_assignments";
+    public static final String JOURNEY_UNIT = "journey_units";
+    public static final String UNIT_QUIZ_QUESTION = "unit_quiz_questions";
+    public static final String LEARNER_JOURNEY_UNIT = "learner_journey_units";
 
     /**
      * @param table  physical table name — must be one of the constants above (never user input;
      *               it is interpolated into the query because table names cannot be bound)
      * @param prefix id prefix including the dash, e.g. {@code "u-"}
      */
-    public String next(String table, String prefix) {
+    public synchronized String next(String table, String prefix) {
         assertKnownTable(table);
 
         Object max = entityManager.createNativeQuery(
@@ -57,7 +64,10 @@ public class IdGeneratorService {
                 .setParameter("pattern", "^" + prefix + "[0-9]+$")
                 .getSingleResult();
 
-        long nextNumber = (max == null ? 0L : ((Number) max).longValue()) + 1L;
+        long fromDb = max == null ? 0L : ((Number) max).longValue();
+        String key = table + ':' + prefix;
+        long nextNumber = Math.max(fromDb, lastIssued.getOrDefault(key, 0L)) + 1L;
+        lastIssued.put(key, nextNumber);
         return prefix + nextNumber;
     }
 
@@ -66,7 +76,8 @@ public class IdGeneratorService {
         switch (table) {
             case USER, JOURNEY, JOURNEY_ITEM, JOURNEY_ITEM_ATTACHMENT, LEARNER_JOURNEY,
                  LEARNER_JOURNEY_ITEM, NOTE, EXAM, EXAM_QUESTION, EXAM_ATTEMPT,
-                 NOTIFICATION, DEPARTMENT, PACKAGE, PACKAGE_ASSIGNMENT -> { /* ok */ }
+                 NOTIFICATION, DEPARTMENT, PACKAGE, PACKAGE_ASSIGNMENT,
+                 JOURNEY_UNIT, UNIT_QUIZ_QUESTION, LEARNER_JOURNEY_UNIT -> { /* ok */ }
             default -> throw new IllegalArgumentException("Unknown table for id generation: " + table);
         }
     }

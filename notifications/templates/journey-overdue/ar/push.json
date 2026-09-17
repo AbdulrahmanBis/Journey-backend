@@ -1,0 +1,4 @@
+{
+  "title": "متأخرة: ${journeyTitle}",
+  "body": "رحلة ${learnerName} كانت مستحقة في ${dueDate} ولم تكتمل بعد."
+}

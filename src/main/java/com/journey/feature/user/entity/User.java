@@ -39,6 +39,10 @@ public class User {
     @Column(name = "preferred_language", length = 8)
     private String preferredLanguage;
 
+    /** Version of the intro guide this person chose not to see again; null = never dismissed. */
+    @Column(name = "intro_seen_version")
+    private Integer introSeenVersion;
+
     /** Set for learners only — references another User's id. */
     @Column(name = "senior_id", length = 36)
     private String seniorId;

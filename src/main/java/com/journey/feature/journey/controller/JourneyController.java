@@ -31,6 +31,12 @@ public class JourneyController {
         return ResponseEntity.ok(journeyService.getById(id));
     }
 
+    /** GET /api/journeys/:id/units — units with items and quiz answers, for editing (staff). */
+    @GetMapping("/{id}/units")
+    public ResponseEntity<List<com.journey.feature.journey.dto.JourneyUnitDto>> getUnits(@PathVariable String id) {
+        return ResponseEntity.ok(journeyService.getUnitsForJourney(id));
+    }
+
     /** GET /api/journeys/:id/items */
     @GetMapping("/{id}/items")
     public ResponseEntity<List<JourneyItemDto>> getItems(@PathVariable String id) {

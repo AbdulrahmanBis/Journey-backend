@@ -22,6 +22,8 @@ public record CatalogEntryDto(
         String description,
         List<String> tags,
         int itemCount,
+        /** Expected duration in days, if set. */
+        Integer targetDays,
         boolean hasExam,
         List<String> journeyTitles,
         long learnerCount,

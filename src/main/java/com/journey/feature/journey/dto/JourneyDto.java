@@ -7,6 +7,7 @@ public record JourneyDto(
         String title,
         String description,
         String techTag,
+        Integer targetDays,
         String createdById,
         String createdByName,
         LocalDateTime createdAt,

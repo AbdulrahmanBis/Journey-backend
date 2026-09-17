@@ -247,8 +247,43 @@ async function main() {
   await check('Status filter shows it in progress', lnSales, 'GET', '/catalog?status=1002', 200, undefined,
     (j) => (j.entries.some((e) => e.id === thirdJourney) ? '' : 'new enrollment not listed as in progress'));
   await check('Enroll again in a cancelled package', lnSales, 'POST', '/catalog/enroll', { type: 1002, id: pkgId }, 201);
-  await check('Senior is told about the enrollment', srSales, 'GET', '/notifications?size=20', 200, undefined,
-    (j) => (j.items.some((n) => n.templateId === 'self-enrolled') ? '' : 'no self-enrolled notification for the reviewer'));
+  // Notifications are dispatched asynchronously after commit, so give them a moment to land.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const r = await call(srSales.token, 'GET', '/notifications?size=50');
+    if (r.json?.items?.some((n) => n.templateId === 'self-enrolled')) break;
+    await new Promise((done) => setTimeout(done, 300));
+  }
+  await check('Senior is told about the enrollment', srSales, 'GET', '/notifications?size=50', 200, undefined,
+    (j) => (j.items.some((n) => n.templateId === 'self-enrolled') ? ''
+      : `no self-enrolled notification for the reviewer; has: ${j.items.map((n) => n.templateId).join(', ') || 'nothing'}`));
+
+  // ── Team dashboard & due dates ────────────────────────────────────────────────────────────
+  const isoIn = (days) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+  await check('Learner opens the team dashboard', lnSales, 'GET', '/team', 403);
+  await check('Senior sees only their learners', srSales, 'GET', '/team', 200, undefined,
+    (j) => (j.learners.length === 1 && j.learners[0].id === lnSalesUser.id && j.seniors.length === 0 ? '' : `got ${j.learners.map((l) => l.name)}`));
+  await check('Manager team excludes other departments', mgrIt, 'GET', '/team', 200, undefined,
+    (j) => (j.learners.every((l) => l.id !== lnSalesUser.id) ? '' : 'IT manager sees a Sales learner'));
+  await check('Manager asks for another department', mgrIt, 'GET', `/team?departmentId=${salesDept}`, 403);
+  await check('HR filters the team by department', hr, 'GET', `/team?departmentId=${salesDept}`, 200, undefined,
+    (j) => (j.learners.length === 1 && j.learners[0].id === lnSalesUser.id ? '' : `expected the Sales learner, got ${j.learners.length}`));
+  await check("Learner's own snapshot", lnSales, 'GET', `/team/learners/${lnSalesUser.id}`, 200);
+  await check("Another department's learner snapshot", mgrIt, 'GET', `/team/learners/${lnSalesUser.id}`, 403);
+
+  await check('Learner moves their own due date', lnSales, 'PATCH', `/learner-journeys/${salesLj}/due-date`, { dueDate: isoIn(30) }, 403);
+  await check('Due date in the past', srSales, 'PATCH', `/learner-journeys/${salesLj}/due-date`, { dueDate: isoIn(-2) }, 400);
+  await check('Senior sets a due date', srSales, 'PATCH', `/learner-journeys/${salesLj}/due-date`, { dueDate: isoIn(2) }, 200, undefined,
+    (j) => (j.dueDate === isoIn(2) ? '' : `dueDate ${j.dueDate}`));
+  await check('Due soon shows on the team dashboard', srSales, 'GET', '/team', 200, undefined,
+    (j) => (j.learners[0].nextDueDate === isoIn(2) ? '' : `nextDueDate ${j.learners[0].nextDueDate}`));
+  await check("Other department's due date", mgrIt, 'PATCH', `/learner-journeys/${salesLj}/due-date`, { dueDate: null }, 403);
+  await check('Assign with a past due date', srSales, 'POST', '/learner-journeys', { journeyId: thirdJourney, learnerId: lnSalesUser.id, dueDate: isoIn(-1) }, [400, 409]);
+
+  // ── Intro guide ───────────────────────────────────────────────────────────────────────────
+  await check('Dismiss the intro with a bad version', lnSales, 'PATCH', '/users/me/intro', { version: 0 }, 400);
+  await check('Dismiss the intro for good', lnSales, 'PATCH', '/users/me/intro', { version: 1 }, 204);
+  await check('Dismissal is on the account', lnSales, 'GET', `/users/${lnSalesUser.id}`, 200, undefined,
+    (j) => (j.introSeenVersion === 1 ? '' : `introSeenVersion ${j.introSeenVersion}`));
 
   // ── Report ────────────────────────────────────────────────────────────────────────────
   const failed = results.filter((r) => !r.ok);

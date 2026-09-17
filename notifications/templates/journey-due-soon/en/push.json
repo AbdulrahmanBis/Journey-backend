@@ -1,0 +1,4 @@
+{
+  "title": "${journeyTitle} is due soon",
+  "body": "Due on ${dueDate} (${daysLeft} day(s) left). Open it to keep going."
+}

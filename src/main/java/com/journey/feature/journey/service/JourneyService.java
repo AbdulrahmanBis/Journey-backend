@@ -12,6 +12,15 @@ import com.journey.feature.journey.dto.JourneyItemDto;
 import com.journey.feature.journey.entity.Journey;
 import com.journey.feature.journey.entity.JourneyItem;
 import com.journey.feature.journey.entity.JourneyItemAttachment;
+import com.journey.feature.journey.entity.JourneyUnit;
+import com.journey.feature.journey.entity.UnitQuizQuestion;
+import com.journey.feature.journey.dto.JourneyUnitDto;
+import com.journey.feature.journey.repository.JourneyUnitRepository;
+import com.journey.feature.journey.repository.UnitQuizQuestionRepository;
+import com.journey.feature.exam.dto.ExamQuestionDto;
+import com.journey.feature.exam.dto.QuestionDraftDto;
+import com.journey.feature.exam.service.ExamService;
+import com.journey.common.enums.ExamQuestionType;
 import com.journey.feature.journey.repository.JourneyItemAttachmentRepository;
 import com.journey.feature.journey.repository.JourneyItemRepository;
 import com.journey.feature.journey.repository.JourneyRepository;
@@ -28,7 +37,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -42,6 +50,11 @@ public class JourneyService {
     private final IdGeneratorService idGenerator;
     private final StorageService storage;
     private final AccessPolicy access;
+    private final JourneyUnitRepository unitRepository;
+    private final UnitQuizQuestionRepository quizRepository;
+
+    /** Unit quizzes are meant to be short ("1–2 questions"); this is the hard ceiling. */
+    static final int MAX_QUIZ_QUESTIONS = 5;
 
     // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -76,6 +89,38 @@ public class JourneyService {
         return journeyItemRepository.findByJourneyIdOrderByOrder(journeyId);
     }
 
+    public List<JourneyUnit> getUnitEntitiesForJourney(String journeyId) {
+        return unitRepository.findByJourneyIdOrderByOrder(journeyId);
+    }
+
+    public List<UnitQuizQuestion> getQuizForUnit(String unitId) {
+        return quizRepository.findByUnitIdOrderByQuestionOrder(unitId);
+    }
+
+    /**
+     * GET /api/journeys/:id/units — the full structure for editing, quiz answers included. Staff only;
+     * learners get their quiz without answers through the learner-journey endpoints.
+     */
+    public List<JourneyUnitDto> getUnitsForJourney(String journeyId) {
+        access.requireRole(AccessPolicy.STAFF);
+        findOrThrow(journeyId);
+        List<JourneyItemDto> items = getItemsForJourney(journeyId);
+        return unitRepository.findByJourneyIdOrderByOrder(journeyId).stream()
+                .map(u -> new JourneyUnitDto(u.getId(), u.getTitle(), u.getDescription(), u.getOrder(),
+                        items.stream().filter(i -> u.getId().equals(i.unitId())).toList(),
+                        quizRepository.findByUnitIdOrderByQuestionOrder(u.getId()).stream().map(this::toQuizDto).toList()))
+                .toList();
+    }
+
+    public ExamQuestionDto toQuizDto(UnitQuizQuestion q) {
+        return new ExamQuestionDto(q.getId(), ExamQuestionType.fromCode(q.getQuestionType()).toDto(), q.getPrompt(),
+                optionsOf(q), q.getCorrectOptionIndex(), q.getCorrectBoolAnswer());
+    }
+
+    public static List<String> optionsOf(UnitQuizQuestion q) {
+        return Stream.of(q.getOption1(), q.getOption2(), q.getOption3(), q.getOption4()).filter(Objects::nonNull).toList();
+    }
+
     // ─── Mutations ────────────────────────────────────────────────────────────
 
     @Transactional
@@ -87,11 +132,12 @@ public class JourneyService {
                 .title(req.title())
                 .description(req.description())
                 .techTag(req.techTag())
+                .targetDays(req.targetDays())
                 .createdById(author.getId())
                 .createdByName(author.getName())
                 .build();
         Journey saved = journeyRepository.save(journey);
-        saveItems(saved.getId(), req.items());
+        saveStructure(saved.getId(), unitsOf(req, List.of()));
         return toDto(saved);
     }
 
@@ -102,21 +148,11 @@ public class JourneyService {
         journey.setTitle(req.title());
         journey.setDescription(req.description());
         journey.setTechTag(req.techTag());
+        journey.setTargetDays(req.targetDays());
         journey.setUpdatedAt(LocalDateTime.now());
         Journey saved = journeyRepository.save(journey);
 
-        /*
-          Items are replaced wholesale. Attachments live in their own table with no cascade, so
-          they must be cleared explicitly or they would be orphaned by the delete below.
-
-          Only the files the author actually dropped may be deleted from storage. An edit re-sends
-          the attachments it is keeping, storage key and all, so deleting every file here — as this
-          once did — left those rows pointing at bytes that no longer existed, and merely renaming a
-          journey broke every attachment in it.
-         */
-        clearAttachmentsFor(getItemEntitiesForJourney(id), retainedKeys(req));
-        journeyItemRepository.deleteByJourneyId(id);
-        saveItems(id, req.items());
+        saveStructure(id, unitsOf(req, unitRepository.findByJourneyIdOrderByOrder(id)));
         return toDto(saved);
     }
 
@@ -132,24 +168,157 @@ public class JourneyService {
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private void saveItems(String journeyId, List<CreateJourneyRequest.ItemPayload> items) {
-        AtomicInteger order = new AtomicInteger(1);
-        items.forEach(item -> {
-            String itemId = item.id() != null
-                    ? item.id()
-                    : idGenerator.next(IdGeneratorService.JOURNEY_ITEM, "ji-");
+    /**
+     * The request's units, or — for a client still sending a flat item list — one unit holding them,
+     * reusing the journey's first unit so its learners' progress is kept.
+     */
+    private List<CreateJourneyRequest.UnitPayload> unitsOf(CreateJourneyRequest req, List<JourneyUnit> existing) {
+        if (req.units() != null && !req.units().isEmpty()) return req.units();
+        if (req.items() == null || req.items().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A journey needs at least one item.");
+        }
+        JourneyUnit first = existing.isEmpty() ? null : existing.get(0);
+        return List.of(new CreateJourneyRequest.UnitPayload(
+                first == null ? null : first.getId(),
+                first == null ? "Unit 1" : first.getTitle(),
+                first == null ? null : first.getDescription(),
+                req.items(),
+                first == null ? null : quizDrafts(first.getId())));
+    }
 
-            JourneyItem ji = JourneyItem.builder()
-                    .id(itemId)
-                    .journeyId(journeyId)
-                    .title(item.title())
-                    .description(item.description())
-                    .order(order.getAndIncrement())
-                    .build();
-            journeyItemRepository.save(ji);
+    /**
+     * Saves units, items, attachments and quizzes <b>in place</b>: an existing unit or item keeps its id
+     * and row, so learners' progress and notes on it survive the edit. Only units and items the author
+     * removed are deleted (and their progress with them).
+     *
+     * <p>This used to delete every item and re-insert it with the same id. The database cascades item
+     * deletes to learner progress and notes, so saving a journey — even unchanged — erased every
+     * learner's progress on it.
+     *
+     * <p>Only the files the author actually dropped are deleted from storage; an edit re-sends the
+     * attachments it keeps, storage key and all.
+     */
+    private void saveStructure(String journeyId, List<CreateJourneyRequest.UnitPayload> units) {
+        if (units.stream().allMatch(u -> u.items() == null || u.items().isEmpty())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A journey needs at least one item.");
+        }
+        Map<String, JourneyUnit> existingUnits = unitRepository.findByJourneyIdOrderByOrder(journeyId).stream()
+                .collect(Collectors.toMap(JourneyUnit::getId, u -> u));
+        Map<String, JourneyItem> existingItems = getItemEntitiesForJourney(journeyId).stream()
+                .collect(Collectors.toMap(JourneyItem::getId, i -> i));
 
-            saveAttachments(itemId, item.attachments());
-        });
+        // Storage: drop bytes no longer referenced anywhere in the journey. Rows are rewritten below.
+        Set<String> retained = units.stream()
+                .flatMap(u -> u.items() == null ? Stream.empty() : u.items().stream())
+                .flatMap(i -> i.attachments() == null ? Stream.<CreateJourneyRequest.AttachmentPayload>empty() : i.attachments().stream())
+                .map(CreateJourneyRequest.AttachmentPayload::storageKey)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        clearAttachmentsFor(List.copyOf(existingItems.values()), retained);
+
+        Set<String> keptUnits = new java.util.HashSet<>();
+        Set<String> keptItems = new java.util.HashSet<>();
+        int itemOrder = 1;
+        for (int u = 0; u < units.size(); u++) {
+            CreateJourneyRequest.UnitPayload payload = units.get(u);
+            if (payload.items() == null || payload.items().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Unit \"" + payload.title() + "\" needs at least one item.");
+            }
+            JourneyUnit unit = payload.id() != null && existingUnits.containsKey(payload.id())
+                    ? existingUnits.get(payload.id())
+                    : JourneyUnit.builder().id(idGenerator.next(IdGeneratorService.JOURNEY_UNIT, "ju-")).journeyId(journeyId).build();
+            unit.setTitle(payload.title().trim());
+            unit.setDescription(payload.description());
+            unit.setOrder(u + 1);
+            unitRepository.save(unit);
+            keptUnits.add(unit.getId());
+
+            for (CreateJourneyRequest.ItemPayload itemPayload : payload.items()) {
+                // Only reuse an id that already belongs to this journey; anything else is a new item.
+                JourneyItem item = itemPayload.id() != null && existingItems.containsKey(itemPayload.id())
+                        ? existingItems.get(itemPayload.id())
+                        : JourneyItem.builder().id(idGenerator.next(IdGeneratorService.JOURNEY_ITEM, "ji-")).journeyId(journeyId).build();
+                item.setUnitId(unit.getId());
+                item.setTitle(itemPayload.title());
+                item.setDescription(itemPayload.description());
+                item.setOrder(itemOrder++);
+                journeyItemRepository.save(item);
+                keptItems.add(item.getId());
+                saveAttachments(item.getId(), itemPayload.attachments());
+            }
+            saveQuiz(unit.getId(), payload.quiz());
+        }
+        journeyItemRepository.flush();
+
+        existingItems.keySet().stream().filter(id -> !keptItems.contains(id))
+                .forEach(journeyItemRepository::deleteById);
+        existingUnits.keySet().stream().filter(id -> !keptUnits.contains(id))
+                .forEach(unitRepository::deleteById);
+    }
+
+    /** Up to five auto-graded questions; existing ids are kept so learners' saved answers still match. */
+    private void saveQuiz(String unitId, List<QuestionDraftDto> drafts) {
+        List<QuestionDraftDto> questions = drafts == null ? List.of() : drafts;
+        if (questions.size() > MAX_QUIZ_QUESTIONS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A unit quiz can have at most " + MAX_QUIZ_QUESTIONS + " questions.");
+        }
+        Map<String, UnitQuizQuestion> existing = quizRepository.findByUnitIdOrderByQuestionOrder(unitId).stream()
+                .collect(Collectors.toMap(UnitQuizQuestion::getId, q -> q));
+        Set<String> kept = new java.util.HashSet<>();
+        for (int i = 0; i < questions.size(); i++) {
+            QuestionDraftDto d = questions.get(i);
+            ExamQuestionType type;
+            try {
+                type = ExamQuestionType.fromCode(d.type());
+            } catch (IllegalArgumentException | NullPointerException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown question type: " + d.type());
+            }
+            if (type == ExamQuestionType.OPEN) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Unit quizzes grade themselves, so they take multiple-choice or yes/no questions only.");
+            }
+            if (d.prompt() == null || d.prompt().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Every quiz question needs a prompt.");
+            }
+            List<String> options = d.options() == null ? List.of() : d.options().stream().filter(o -> o != null && !o.isBlank()).toList();
+            if (type == ExamQuestionType.MULTIPLE_CHOICE) {
+                if (options.size() < 2 || options.size() > 4) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A multiple-choice question needs 2 to 4 options.");
+                }
+                Integer correct = d.correctOptionIndex();
+                if (correct == null || correct < ExamService.OPTION_CODE_BASE || correct >= ExamService.OPTION_CODE_BASE + options.size()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick the correct option for \"" + d.prompt() + "\".");
+                }
+            } else if (d.correctBoolAnswer() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick yes or no as the answer for \"" + d.prompt() + "\".");
+            }
+
+            UnitQuizQuestion q = d.id() != null && existing.containsKey(d.id())
+                    ? existing.get(d.id())
+                    : UnitQuizQuestion.builder().id(idGenerator.next(IdGeneratorService.UNIT_QUIZ_QUESTION, "uq-")).unitId(unitId).build();
+            q.setQuestionOrder(i + 1);
+            q.setQuestionType(type.getCode());
+            q.setPrompt(d.prompt().trim());
+            boolean mc = type == ExamQuestionType.MULTIPLE_CHOICE;
+            q.setOption1(mc && options.size() > 0 ? options.get(0) : null);
+            q.setOption2(mc && options.size() > 1 ? options.get(1) : null);
+            q.setOption3(mc && options.size() > 2 ? options.get(2) : null);
+            q.setOption4(mc && options.size() > 3 ? options.get(3) : null);
+            q.setCorrectOptionIndex(mc ? d.correctOptionIndex() : null);
+            q.setCorrectBoolAnswer(mc ? null : d.correctBoolAnswer());
+            quizRepository.save(q);
+            kept.add(q.getId());
+        }
+        existing.keySet().stream().filter(id -> !kept.contains(id)).forEach(quizRepository::deleteById);
+    }
+
+    private List<QuestionDraftDto> quizDrafts(String unitId) {
+        return quizRepository.findByUnitIdOrderByQuestionOrder(unitId).stream()
+                .map(q -> new QuestionDraftDto(q.getId(), q.getQuestionType(), q.getPrompt(), optionsOf(q),
+                        q.getCorrectOptionIndex(), q.getCorrectBoolAnswer()))
+                .toList();
     }
 
     /** Attachments arrive as the complete set for an item, so the existing rows are replaced. */
@@ -207,16 +376,6 @@ public class JourneyService {
         }
     }
 
-    /** Every storage key the incoming request still refers to. */
-    private Set<String> retainedKeys(CreateJourneyRequest req) {
-        return req.items().stream()
-                .flatMap(i -> i.attachments() == null ? Stream.<CreateJourneyRequest.AttachmentPayload>empty()
-                                                      : i.attachments().stream())
-                .map(CreateJourneyRequest.AttachmentPayload::storageKey)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-    }
-
     /**
      * Removes attachment rows, and the stored bytes behind them except for keys listed in
      * {@code retained}, so dropped uploads do not pile up and kept ones survive an edit.
@@ -237,7 +396,7 @@ public class JourneyService {
     // ─── Mappers ──────────────────────────────────────────────────────────────
 
     public JourneyDto toDto(Journey j) {
-        return new JourneyDto(j.getId(), j.getTitle(), j.getDescription(), j.getTechTag(),
+        return new JourneyDto(j.getId(), j.getTitle(), j.getDescription(), j.getTechTag(), j.getTargetDays(),
                 j.getCreatedById(), j.getCreatedByName(), j.getCreatedAt(), j.getUpdatedAt());
     }
 
@@ -247,7 +406,7 @@ public class JourneyService {
 
     private JourneyItemDto toItemDto(JourneyItem i, List<JourneyItemAttachment> attachments) {
         return new JourneyItemDto(
-                i.getId(), i.getJourneyId(), i.getTitle(), i.getDescription(), i.getOrder(),
+                i.getId(), i.getJourneyId(), i.getUnitId(), i.getTitle(), i.getDescription(), i.getOrder(),
                 attachments.stream()
                         .sorted(Comparator.comparing(JourneyItemAttachment::getOrder,
                                 Comparator.nullsLast(Comparator.naturalOrder())))

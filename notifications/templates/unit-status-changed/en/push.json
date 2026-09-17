@@ -1,0 +1,4 @@
+{
+  "title": "${unitTitle}: ${statusEn}",
+  "body": "${actorName} marked ${unitTitle} in ${journeyTitle} as ${statusEn}."
+}

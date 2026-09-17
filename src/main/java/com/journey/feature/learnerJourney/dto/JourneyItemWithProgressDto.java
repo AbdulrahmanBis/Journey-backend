@@ -17,6 +17,7 @@ public record JourneyItemWithProgressDto(
         // from JourneyItem (template)
         String id,
         String journeyId,
+        String unitId,
         String title,
         String description,
         Integer order,

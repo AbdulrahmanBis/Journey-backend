@@ -10,5 +10,6 @@ import java.util.List;
 public record SavePackageRequest(
         @NotBlank @Size(max = 255) String title,
         String description,
+        @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(730) Integer targetDays,
         @NotEmpty List<String> journeyIds
 ) {}

@@ -10,10 +10,27 @@ public record CreateJourneyRequest(
         @NotBlank String title,
         String description,
         String techTag,
+        /** Optional expected duration in days. */
+        @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(730) Integer targetDays,
         String createdById,
         String createdByName,
-        @NotEmpty List<ItemPayload> items
+        /** Flat list, for a journey with a single unit. Ignored when {@code units} is sent. */
+        List<ItemPayload> items,
+        /** The journey's units in order, each with its items and optional quiz. */
+        List<UnitPayload> units
 ) {
+    /**
+     * @param id   present when editing an existing unit; its items' progress is kept
+     * @param quiz up to five auto-graded questions (multiple choice or yes/no)
+     */
+    public record UnitPayload(
+            String id,
+            @NotBlank String title,
+            String description,
+            List<ItemPayload> items,
+            List<com.journey.feature.exam.dto.QuestionDraftDto> quiz
+    ) {}
+
     public record ItemPayload(
             String id,          // present on update (reuse existing), null on create
             @NotBlank String title,

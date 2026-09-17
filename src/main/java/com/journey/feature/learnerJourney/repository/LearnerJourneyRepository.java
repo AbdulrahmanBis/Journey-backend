@@ -12,6 +12,11 @@ public interface LearnerJourneyRepository extends JpaRepository<LearnerJourney, 
 
     List<LearnerJourney> findByLearnerId(String learnerId);
 
+    /** Open journeys with a deadline on or before {@code until}: the reminder job's candidates. */
+    List<LearnerJourney> findByDueDateLessThanEqualAndStatusNotIn(java.time.LocalDate until, java.util.Collection<Integer> statuses);
+
+    List<LearnerJourney> findByLearnerIdIn(java.util.Collection<String> learnerIds);
+
     /**
      * A learner may hold a journey more than once only if the earlier ones were cancelled, so
      * "status not CANCELLED" matches at most one row.

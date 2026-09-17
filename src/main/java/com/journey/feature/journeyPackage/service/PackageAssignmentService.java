@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -113,7 +114,8 @@ public class PackageAssignmentService {
         if (!AccessPolicy.hasRole(learner, UserRole.LEARNER)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, learner.getName() + " is not a Learner.");
         }
-        return toDto(createAssignment(packageService.requirePackage(req.packageId()), learner, actor, false));
+        LearnerJourneyService.requireNotPast(req.dueDate());
+        return toDto(createAssignment(packageService.requirePackage(req.packageId()), learner, actor, false, req.dueDate()));
     }
 
     /**
@@ -122,10 +124,17 @@ public class PackageAssignmentService {
      */
     @Transactional
     public PackageAssignment enrollSelf(String packageId, User learner, User reviewer) {
-        return createAssignment(packageService.requirePackage(packageId), learner, reviewer, true);
+        return createAssignment(packageService.requirePackage(packageId), learner, reviewer, true, null);
     }
 
-    private PackageAssignment createAssignment(JourneyPackage pkg, User learner, User actor, boolean selfEnrolled) {
+    /**
+     * @param dueDate null → today + the package's target days, or no deadline if it has none. Journeys the
+     *                package creates share the package's due date; without one they fall back to their own.
+     */
+    private PackageAssignment createAssignment(JourneyPackage pkg, User learner, User actor, boolean selfEnrolled,
+                                               LocalDate dueDate) {
+        LocalDate due = dueDate != null ? dueDate
+                : pkg.getTargetDays() == null ? null : LocalDate.now().plusDays(pkg.getTargetDays());
         List<PackageJourney> definition = packageService.journeysOf(pkg.getId());
         if (definition.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This package has no journeys.");
@@ -141,6 +150,7 @@ public class PackageAssignmentService {
                 .assignedById(actor.getId())
                 .assignedByName(actor.getName())
                 .selfEnrolled(selfEnrolled)
+                .dueDate(due)
                 .build());
 
         for (PackageJourney pj : definition) {
@@ -149,7 +159,7 @@ public class PackageAssignmentService {
                     .orElse(null);
             LearnerJourney lj = existing != null
                     ? existing
-                    : learnerJourneyService.createAssignment(pj.getJourneyId(), learner, actor, selfEnrolled);
+                    : learnerJourneyService.createAssignment(pj.getJourneyId(), learner, actor, selfEnrolled, due);
             assignmentJourneyRepository.save(PackageAssignmentJourney.builder()
                     .packageAssignmentId(pa.getId())
                     .learnerJourneyId(lj.getId())
@@ -230,7 +240,7 @@ public class PackageAssignmentService {
         else status = ItemStatus.NEW;
 
         return new PackageAssignmentDto(pa.getId(), pkg.getId(), pkg.getTitle(), pkg.getDescription(),
-                pa.getLearnerId(), pa.getAssignedById(), pa.getAssignedByName(), pa.getAssignedAt(),
+                pa.getLearnerId(), pa.getAssignedById(), pa.getAssignedByName(), pa.getAssignedAt(), pa.getDueDate(),
                 Boolean.TRUE.equals(pa.getSelfEnrolled()),
                 pa.getCancelledAt(), status.toDto(), percent, completed, live.size(), journeys);
     }

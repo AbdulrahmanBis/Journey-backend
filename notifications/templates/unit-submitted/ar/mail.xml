@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>أنهى ${learnerName} وحدة ${unitTitle}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>أنهى <strong>${learnerName}</strong> وحدة <strong>${unitTitle}</strong> في ${journeyTitle}، وهي بانتظار مراجعتك.</p>
+      <p><a href="${appUrl}${link}">راجع الوحدة</a>: أكملها أو أعدها مع ملاحظة.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

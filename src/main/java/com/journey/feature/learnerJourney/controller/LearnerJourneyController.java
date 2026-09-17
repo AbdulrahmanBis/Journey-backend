@@ -46,6 +46,16 @@ public class LearnerJourneyController {
         return ResponseEntity.ok(service.updateJourneyStatus(id, req));
     }
 
+    /** PATCH /api/learner-journeys/:id/due-date  { "dueDate": "2026-10-01" | null } */
+    @PatchMapping("/api/learner-journeys/{id}/due-date")
+    public ResponseEntity<LearnerJourneyViewDto> updateDueDate(
+            @PathVariable String id,
+            @RequestBody java.util.Map<String, String> body) {
+        String raw = body.get("dueDate");
+        java.time.LocalDate dueDate = raw == null || raw.isBlank() ? null : java.time.LocalDate.parse(raw);
+        return ResponseEntity.ok(service.updateDueDate(id, dueDate));
+    }
+
     // ─── Learner-journey-items ────────────────────────────────────────────────
 
     /**

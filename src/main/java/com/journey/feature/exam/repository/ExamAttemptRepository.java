@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface ExamAttemptRepository extends JpaRepository<ExamAttempt, String> {
 
     Optional<ExamAttempt> findByLearnerJourneyId(String learnerJourneyId);
+
+    java.util.List<ExamAttempt> findByLearnerJourneyIdIn(java.util.Collection<String> learnerJourneyIds);
 }

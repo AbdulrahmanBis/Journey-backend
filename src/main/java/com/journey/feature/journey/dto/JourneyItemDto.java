@@ -12,6 +12,7 @@ import java.util.List;
 public record JourneyItemDto(
         String id,
         String journeyId,
+        String unitId,
         String title,
         String description,
         Integer order,

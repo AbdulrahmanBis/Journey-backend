@@ -6,6 +6,7 @@ import com.journey.feature.exam.dto.ExamAttemptDto;
 import com.journey.feature.exam.dto.ExamDto;
 import com.journey.feature.journey.dto.JourneyDto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -18,6 +19,8 @@ public record LearnerJourneyViewDto(
         String assignedById,
         String assignedByName,
         LocalDateTime assignedAt,
+        /** Null when there is no deadline. */
+        LocalDate dueDate,
         /** Enrolled from the catalog; assignedBy is then the reviewer. */
         boolean selfEnrolled,
         EnumValueDto status,
@@ -31,5 +34,7 @@ public record LearnerJourneyViewDto(
         /** Present when the journey template has an exam configured. */
         ExamDto exam,
         /** Present once the learner has submitted an attempt. */
-        ExamAttemptDto examAttempt
+        ExamAttemptDto examAttempt,
+        /** The journey's units with this learner's status on each. */
+        List<UnitProgressSummaryDto> units
 ) {}

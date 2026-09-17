@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -42,6 +43,9 @@ public class PackageAssignment {
     @Column(name = "assigned_at", nullable = false)
     @Builder.Default
     private LocalDateTime assignedAt = LocalDateTime.now();
+
+    @Column(name = "due_date")
+    private LocalDate dueDate;
 
     /** Enrolled from the catalog; assignedBy then holds the reviewer, as on LearnerJourney. */
     @Column(name = "self_enrolled", nullable = false)

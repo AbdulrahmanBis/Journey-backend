@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${learnerName} finished ${unitTitle}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${learnerName}</strong> finished <strong>${unitTitle}</strong> in ${journeyTitle} and it is waiting for your review.</p>
+    <p><a href="${appUrl}${link}">Review the unit</a> — complete it, or send it back with a note.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

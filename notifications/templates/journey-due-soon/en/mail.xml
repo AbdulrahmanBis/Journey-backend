@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${journeyTitle} is due on ${dueDate}</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p>Your journey <strong>${journeyTitle}</strong> is due on <strong>${dueDate}</strong>, in ${daysLeft} day(s).</p>
+    <p><a href="${appUrl}${link}">Open the journey</a> to keep going, or talk to your reviewer if you need more time.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

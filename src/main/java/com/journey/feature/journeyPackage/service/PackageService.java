@@ -56,6 +56,7 @@ public class PackageService {
                 .id(idGenerator.next(IdGeneratorService.PACKAGE, "pkg-"))
                 .title(req.title().trim())
                 .description(blankToNull(req.description()))
+                .targetDays(req.targetDays())
                 .createdById(author.getId())
                 .createdByName(author.getName())
                 .build());
@@ -71,6 +72,7 @@ public class PackageService {
         List<String> journeyIds = validJourneyIds(req.journeyIds());
         pkg.setTitle(req.title().trim());
         pkg.setDescription(blankToNull(req.description()));
+        pkg.setTargetDays(req.targetDays());
         pkg.setUpdatedAt(LocalDateTime.now());
         packageRepository.save(pkg);
         packageJourneyRepository.deleteByPackageId(id);
@@ -131,7 +133,7 @@ public class PackageService {
                     return new PackageJourneyDto(j.getId(), j.getTitle(), j.getTechTag(), pj.getPosition());
                 })
                 .toList();
-        return new PackageDto(p.getId(), p.getTitle(), p.getDescription(), p.getCreatedById(),
+        return new PackageDto(p.getId(), p.getTitle(), p.getDescription(), p.getTargetDays(), p.getCreatedById(),
                 p.getCreatedByName(), p.getCreatedAt(), p.getUpdatedAt(), journeys,
                 assignmentRepository.countByPackageIdAndCancelledAtIsNull(p.getId()),
                 assignmentRepository.countByPackageId(p.getId()) == 0);

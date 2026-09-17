@@ -1,0 +1,17 @@
+{
+  "channels": [
+    "IN_APP",
+    "MAIL"
+  ],
+  "recipients": [
+    "learner",
+    "assigner"
+  ],
+  "link": "/journey-log/${learnerJourneyId}",
+  "variables": [
+    "learnerName",
+    "journeyTitle",
+    "dueDate",
+    "learnerJourneyId"
+  ]
+}

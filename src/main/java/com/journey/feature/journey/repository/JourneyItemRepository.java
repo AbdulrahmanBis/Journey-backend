@@ -15,6 +15,8 @@ public interface JourneyItemRepository extends JpaRepository<JourneyItem, String
 
     long countByJourneyId(String journeyId);
 
+    List<JourneyItem> findByJourneyIdIn(java.util.Collection<String> journeyIds);
+
     @Modifying
     @Transactional
     void deleteByJourneyId(String journeyId);

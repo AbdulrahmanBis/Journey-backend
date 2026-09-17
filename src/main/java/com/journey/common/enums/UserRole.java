@@ -8,7 +8,7 @@ public enum UserRole{
 
     ADMIN(1001, "Admin", "مدير النظام"),
     MANAGER(1002, "Manager", "مدير"),
-    SENIOR(1003, "Senior", "خبير"),
+    SENIOR(1003, "Senior", "مشرف"),
     LEARNER(1004, "Learner", "متعلم"),
     /**
      * Human resources. Sees and manages people across every department — the reach the Manager

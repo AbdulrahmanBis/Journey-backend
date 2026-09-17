@@ -13,6 +13,7 @@ import com.journey.feature.catalog.dto.EnrollResultDto;
 import com.journey.feature.catalog.dto.FacetDto;
 import com.journey.feature.catalog.dto.MyProgressDto;
 import com.journey.feature.catalog.dto.SyllabusEntryDto;
+import com.journey.feature.catalog.dto.SyllabusUnitDto;
 import com.journey.feature.catalog.event.SelfEnrolledEvent;
 import com.journey.feature.exam.repository.ExamRepository;
 import com.journey.feature.journey.dto.JourneyDto;
@@ -136,10 +137,16 @@ public class CatalogService {
         User actor = access.actor();
         JourneyDto journey = journeyService.getById(journeyId);
         User learner = AccessPolicy.hasRole(actor, UserRole.LEARNER) ? actor : null;
-        List<SyllabusEntryDto> syllabus = journeyService.getItemEntitiesForJourney(journeyId).stream()
-                .map(item -> new SyllabusEntryDto(item.getOrder(), item.getTitle(), item.getDescription(), null, null, null))
+        List<JourneyItem> items = journeyService.getItemEntitiesForJourney(journeyId);
+        List<SyllabusUnitDto> units = journeyService.getUnitEntitiesForJourney(journeyId).stream()
+                .map(unit -> new SyllabusUnitDto(unit.getOrder(), unit.getTitle(), unit.getDescription(),
+                        items.stream()
+                                .filter(item -> unit.getId().equals(item.getUnitId()))
+                                .map(item -> new SyllabusEntryDto(item.getOrder(), item.getTitle(), item.getDescription(), null, null, null))
+                                .toList(),
+                        journeyService.getQuizForUnit(unit.getId()).size()))
                 .toList();
-        return new CatalogDetailDto(journeyCandidate(journey, learner).entry(), syllabus,
+        return new CatalogDetailDto(journeyCandidate(journey, learner).entry(), null, units,
                 learner == null ? null : reviewerNameOf(learner));
     }
 
@@ -154,7 +161,7 @@ public class CatalogService {
                             (int) journeyItemRepository.countByJourneyId(j.id()), j.id());
                 })
                 .toList();
-        return new CatalogDetailDto(packageCandidate(pkg, learner).entry(), syllabus,
+        return new CatalogDetailDto(packageCandidate(pkg, learner).entry(), syllabus, null,
                 learner == null ? null : reviewerNameOf(learner));
     }
 
@@ -213,6 +220,7 @@ public class CatalogService {
         CatalogEntryDto entry = new CatalogEntryDto(
                 CatalogItemType.JOURNEY.toDto(), j.id(), j.title(), j.description(), tags,
                 items.size(),
+                j.targetDays(),
                 examRepository.findByJourneyId(j.id()).isPresent(),
                 null,
                 learnerJourneyRepository.countByJourneyIdAndStatusNot(j.id(), ItemStatus.CANCELLED.getCode()),
@@ -234,7 +242,7 @@ public class CatalogService {
                 .anyMatch(pj -> examRepository.findByJourneyId(pj.journeyId()).isPresent());
         CatalogEntryDto entry = new CatalogEntryDto(
                 CatalogItemType.PACKAGE.toDto(), p.id(), p.title(), p.description(), tags,
-                p.journeys().size(), anyExam, titles,
+                p.journeys().size(), p.targetDays(), anyExam, titles,
                 packageAssignmentRepository.countByPackageIdAndCancelledAtIsNull(p.id()),
                 p.createdByName(), p.updatedAt(),
                 learner == null ? null : myPackageProgress(p.id(), learner));

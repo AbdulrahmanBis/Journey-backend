@@ -21,6 +21,10 @@ import com.journey.feature.learnerJourney.event.JourneyCancelledEvent;
 import com.journey.feature.learnerJourney.event.JourneyCompletedEvent;
 import com.journey.feature.learnerJourney.event.NoteAddedEvent;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyItemRepository;
+import com.journey.feature.learnerJourney.repository.LearnerJourneyUnitRepository;
+import com.journey.feature.learnerJourney.entity.LearnerJourneyUnit;
+import com.journey.feature.learnerJourney.event.UnitSubmittedEvent;
+import com.journey.feature.journey.entity.JourneyUnit;
 import com.journey.feature.learnerJourney.repository.LearnerJourneyRepository;
 import com.journey.feature.learnerJourney.repository.NoteRepository;
 import com.journey.feature.user.entity.User;
@@ -32,6 +36,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +54,8 @@ public class LearnerJourneyService {
     private final ApplicationEventPublisher events;
     private final AccessPolicy access;
     private final UserRepository userRepository;
+    private final LearnerJourneyUnitRepository learnerJourneyUnitRepository;
+    private final com.journey.feature.journey.repository.UnitQuizQuestionRepository quizRepository;
 
     // ─── Queries ──────────────────────────────────────────────────────────────
     //
@@ -96,7 +103,8 @@ public class LearnerJourneyService {
                     "This learner is already assigned to that journey.");
         }
 
-        LearnerJourney saved = createAssignment(req.journeyId(), learner, actor);
+        requireNotPast(req.dueDate());
+        LearnerJourney saved = createAssignment(req.journeyId(), learner, actor, false, req.dueDate());
 
         /*
           Announced through an event rather than by calling the notifier directly, so this service
@@ -129,15 +137,25 @@ public class LearnerJourneyService {
      */
     @Transactional
     public LearnerJourney createAssignment(String journeyId, User learner, User actor) {
-        return createAssignment(journeyId, learner, actor, false);
+        return createAssignment(journeyId, learner, actor, false, null);
+    }
+
+    @Transactional
+    public LearnerJourney createAssignment(String journeyId, User learner, User assigner, boolean selfEnrolled) {
+        return createAssignment(journeyId, learner, assigner, selfEnrolled, null);
     }
 
     /**
      * @param assigner     who is recorded as assigning it; for a self-enrollment, the reviewer
      * @param selfEnrolled the learner enrolled from the catalog
+     * @param dueDate      null → today + the journey's target days, or no deadline if it has none
      */
     @Transactional
-    public LearnerJourney createAssignment(String journeyId, User learner, User assigner, boolean selfEnrolled) {
+    public LearnerJourney createAssignment(String journeyId, User learner, User assigner, boolean selfEnrolled,
+                                           LocalDate dueDate) {
+        Journey journey = journeyService.getEntityById(journeyId);
+        LocalDate due = dueDate != null ? dueDate
+                : journey.getTargetDays() == null ? null : LocalDate.now().plusDays(journey.getTargetDays());
         LearnerJourney saved = learnerJourneyRepository.save(LearnerJourney.builder()
                 .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY, "lj-"))
                 .journeyId(journeyId)
@@ -145,17 +163,37 @@ public class LearnerJourneyService {
                 .assignedById(assigner.getId())
                 .assignedByName(assigner.getName())
                 .selfEnrolled(selfEnrolled)
+                .dueDate(due)
                 .status(ItemStatus.NEW.getCode())
                 .build());
 
-        journeyService.getItemEntitiesForJourney(journeyId).forEach(item ->
-                learnerJourneyItemRepository.save(LearnerJourneyItem.builder()
-                        .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY_ITEM, "lji-"))
-                        .learnerJourneyId(saved.getId())
-                        .journeyItemId(item.getId())
-                        .status(ItemStatus.NEW.getCode())
-                        .build()));
+        ensureProgressRows(saved);
         return saved;
+    }
+
+    /**
+     * PATCH /api/learner-journeys/:id/due-date — staff who can see the learner move or clear the
+     * deadline. Null clears it.
+     */
+    @Transactional
+    public LearnerJourneyViewDto updateDueDate(String id, LocalDate dueDate) {
+        access.requireRole(AccessPolicy.STAFF);
+        LearnerJourney lj = findLjOrThrow(id);
+        access.requireViewable(lj.getLearnerId());
+        requireNotPast(dueDate);
+        lj.setDueDate(dueDate);
+        // A new deadline earns its own reminders.
+        lj.setDueSoonNotifiedAt(null);
+        lj.setOverdueNotifiedAt(null);
+        learnerJourneyRepository.save(lj);
+        return buildView(lj);
+    }
+
+    /** A new deadline can't already have passed. */
+    public static void requireNotPast(LocalDate dueDate) {
+        if (dueDate != null && dueDate.isBefore(LocalDate.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The due date can't be in the past.");
+        }
     }
 
     /** Cancels without an event, for callers that announce the cancellation themselves. */
@@ -233,7 +271,12 @@ public class LearnerJourneyService {
 
         LearnerJourneyItem saved = learnerJourneyItemRepository.save(item);
 
-        // Auto-update parent LearnerJourney status based on item completions
+        LearnerJourney lj = findLjOrThrow(item.getLearnerJourneyId());
+        String unitId = unitIdOfItem(lj, item.getJourneyItemId());
+        if (unitId != null) {
+            if (status != ItemStatus.NEW) startUnit(lj, unitId);
+            if (status == ItemStatus.COMPLETED) submitUnitIfReady(lj, unitId);
+        }
         recomputeJourneyStatus(item.getLearnerJourneyId());
 
         /*
@@ -325,7 +368,7 @@ public class LearnerJourneyService {
                     );
 
                     return new JourneyItemWithProgressDto(
-                            ti.id(), ti.journeyId(), ti.title(),
+                            ti.id(), ti.journeyId(), ti.unitId(), ti.title(),
                             ti.description(), ti.order(), ti.attachments(), progressDto);
                 })
                 .toList();
@@ -337,9 +380,8 @@ public class LearnerJourneyService {
                 ? 0
                 : (int) Math.round((double) completedCount / itemViews.size() * 100);
 
-        // Total hours — sum of completed items only
+        // Time is tracked while items are open, so every item's time counts, finished or not.
         double totalHours = itemViews.stream()
-                .filter(LearnerJourneyService::isCompleted)
                 .mapToDouble(i -> i.progress().timeSpentHours() != null ? i.progress().timeSpentHours() : 0.0)
                 .sum();
         totalHours = Math.round(totalHours * 10.0) / 10.0;
@@ -350,6 +392,7 @@ public class LearnerJourneyService {
         return new LearnerJourneyViewDto(
                 lj.getId(), lj.getJourneyId(), lj.getLearnerId(),
                 lj.getAssignedById(), lj.getAssignedByName(), lj.getAssignedAt(),
+                lj.getDueDate(),
                 Boolean.TRUE.equals(lj.getSelfEnrolled()),
                 ItemStatus.fromCode(lj.getStatus()).toDto(), lj.getStartedAt(), lj.getCompletedAt(),
                 journeyService.toDto(journey),
@@ -357,8 +400,122 @@ public class LearnerJourneyService {
                 percentComplete,
                 totalHours,
                 exam,
-                attempt
+                attempt,
+                unitSummaries(lj, progressRows)
         );
+    }
+
+    /** Each unit with this learner's status and item counts. */
+    private List<UnitProgressSummaryDto> unitSummaries(LearnerJourney lj, List<LearnerJourneyItem> progressRows) {
+        List<JourneyItem> items = journeyService.getItemEntitiesForJourney(lj.getJourneyId());
+        java.util.Map<String, LearnerJourneyUnit> byUnit = learnerJourneyUnitRepository.findByLearnerJourneyId(lj.getId()).stream()
+                .collect(java.util.stream.Collectors.toMap(LearnerJourneyUnit::getUnitId, u -> u, (a, b) -> a));
+        return journeyService.getUnitEntitiesForJourney(lj.getJourneyId()).stream()
+                .map(unit -> {
+                    List<String> itemIds = items.stream().filter(i -> unit.getId().equals(i.getUnitId())).map(JourneyItem::getId).toList();
+                    int done = (int) progressRows.stream()
+                            .filter(p -> itemIds.contains(p.getJourneyItemId()) && p.getStatus() == ItemStatus.COMPLETED.getCode())
+                            .count();
+                    LearnerJourneyUnit lu = byUnit.get(unit.getId());
+                    boolean hasQuiz = !quizRepository.findByUnitIdOrderByQuestionOrder(unit.getId()).isEmpty();
+                    return new UnitProgressSummaryDto(
+                            lu == null ? null : lu.getId(), unit.getId(), unit.getTitle(), unit.getOrder(),
+                            ItemStatus.fromCode(lu == null ? ItemStatus.NEW.getCode() : lu.getStatus()).toDto(),
+                            done, itemIds.size(), hasQuiz, lu != null && lu.getQuizSubmittedAt() != null,
+                            lu == null ? null : lu.getUpdatedAt());
+                })
+                .toList();
+    }
+
+    // ─── Units ────────────────────────────────────────────────────────────────
+
+    /**
+     * Makes sure the learner has a progress row for every item and unit of the journey — the journey
+     * may have gained items or units since it was assigned. Returns the unit rows.
+     */
+    @Transactional
+    public List<LearnerJourneyUnit> ensureProgressRows(LearnerJourney lj) {
+        java.util.Set<String> haveItems = learnerJourneyItemRepository.findByLearnerJourneyId(lj.getId()).stream()
+                .map(LearnerJourneyItem::getJourneyItemId).collect(java.util.stream.Collectors.toSet());
+        for (JourneyItem item : journeyService.getItemEntitiesForJourney(lj.getJourneyId())) {
+            if (haveItems.contains(item.getId())) continue;
+            learnerJourneyItemRepository.save(LearnerJourneyItem.builder()
+                    .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY_ITEM, "lji-"))
+                    .learnerJourneyId(lj.getId())
+                    .journeyItemId(item.getId())
+                    .status(ItemStatus.NEW.getCode())
+                    .build());
+        }
+        List<LearnerJourneyUnit> units = new java.util.ArrayList<>(learnerJourneyUnitRepository.findByLearnerJourneyId(lj.getId()));
+        java.util.Set<String> haveUnits = units.stream().map(LearnerJourneyUnit::getUnitId).collect(java.util.stream.Collectors.toSet());
+        for (JourneyUnit unit : journeyService.getUnitEntitiesForJourney(lj.getJourneyId())) {
+            if (haveUnits.contains(unit.getId())) continue;
+            units.add(learnerJourneyUnitRepository.save(LearnerJourneyUnit.builder()
+                    .id(idGenerator.next(IdGeneratorService.LEARNER_JOURNEY_UNIT, "lju-"))
+                    .learnerJourneyId(lj.getId())
+                    .unitId(unit.getId())
+                    .status(ItemStatus.NEW.getCode())
+                    .build()));
+        }
+        return units;
+    }
+
+    /** The learner started working in a unit: NEW → in progress. */
+    public void startUnit(LearnerJourney lj, String unitId) {
+        LearnerJourneyUnit lu = unitRow(lj, unitId);
+        if (lu != null && lu.getStatus() == ItemStatus.NEW.getCode()) {
+            lu.setStatus(ItemStatus.REFLECT.getCode());
+            lu.setUpdatedAt(LocalDateTime.now());
+            learnerJourneyUnitRepository.save(lu);
+        }
+    }
+
+    /** Every item of the unit completed, and its quiz answered if it has one. */
+    public boolean unitReady(LearnerJourney lj, String unitId) {
+        LearnerJourneyUnit lu = unitRow(lj, unitId);
+        if (lu == null) return false;
+        java.util.Set<String> itemIds = journeyService.getItemEntitiesForJourney(lj.getJourneyId()).stream()
+                .filter(i -> unitId.equals(i.getUnitId())).map(JourneyItem::getId).collect(java.util.stream.Collectors.toSet());
+        boolean itemsDone = learnerJourneyItemRepository.findByLearnerJourneyId(lj.getId()).stream()
+                .filter(p -> itemIds.contains(p.getJourneyItemId()))
+                .allMatch(p -> p.getStatus() == ItemStatus.COMPLETED.getCode());
+        boolean quizDone = quizRepository.findByUnitIdOrderByQuestionOrder(unitId).isEmpty() || lu.getQuizSubmittedAt() != null;
+        return itemsDone && quizDone;
+    }
+
+    /**
+     * Sends the unit for review when its last requirement was just met. Called only from the learner's
+     * own actions (completing an item, submitting the quiz, "send for review"), so a unit a reviewer sent
+     * back is not bounced straight back to them.
+     *
+     * @return true when the unit moved to waiting for review
+     */
+    public boolean submitUnitIfReady(LearnerJourney lj, String unitId) {
+        LearnerJourneyUnit lu = unitRow(lj, unitId);
+        if (lu == null || !unitReady(lj, unitId)) return false;
+        if (lu.getStatus() != ItemStatus.NEW.getCode() && lu.getStatus() != ItemStatus.REFLECT.getCode()) return false;
+        lu.setStatus(ItemStatus.RESPONSE.getCode());
+        lu.setUpdatedAt(LocalDateTime.now());
+        learnerJourneyUnitRepository.save(lu);
+        String unitTitle = journeyService.getUnitEntitiesForJourney(lj.getJourneyId()).stream()
+                .filter(u -> u.getId().equals(unitId)).map(JourneyUnit::getTitle).findFirst().orElse("");
+        events.publishEvent(new UnitSubmittedEvent(lj.getId(), journeyTitleOf(lj), unitTitle, lj.getLearnerId(), lj.getAssignedById()));
+        return true;
+    }
+
+    /** True when every unit is ready — the final exam opens then. */
+    public boolean allUnitsReady(LearnerJourney lj) {
+        return journeyService.getUnitEntitiesForJourney(lj.getJourneyId()).stream().allMatch(u -> unitReady(lj, u.getId()));
+    }
+
+    public String unitIdOfItem(LearnerJourney lj, String journeyItemId) {
+        return journeyService.getItemEntitiesForJourney(lj.getJourneyId()).stream()
+                .filter(i -> i.getId().equals(journeyItemId)).map(JourneyItem::getUnitId).findFirst().orElse(null);
+    }
+
+    private LearnerJourneyUnit unitRow(LearnerJourney lj, String unitId) {
+        return learnerJourneyUnitRepository.findByLearnerJourneyId(lj.getId()).stream()
+                .filter(u -> u.getUnitId().equals(unitId)).findFirst().orElse(null);
     }
 
     /** True when this composed item view is in the COMPLETED state. */
@@ -370,16 +527,26 @@ public class LearnerJourneyService {
 
     // ─── Auto-status promotion ────────────────────────────────────────────────
 
-    private void recomputeJourneyStatus(String learnerJourneyId) {
+    /**
+     * The journey follows its units: completed once every unit is completed by a reviewer and, if the
+     * journey has an exam, the exam is passed; in progress once anything has started. A cancelled journey
+     * is left alone, and so is a manual override to completed.
+     */
+    public void recomputeJourneyStatus(String learnerJourneyId) {
         LearnerJourney lj = findLjOrThrow(learnerJourneyId);
         if (lj.getStatus() == ItemStatus.CANCELLED.getCode()) return;
 
         List<LearnerJourneyItem> items =
                 learnerJourneyItemRepository.findByLearnerJourneyId(learnerJourneyId);
-        if (items.isEmpty()) return;
+        List<LearnerJourneyUnit> units = learnerJourneyUnitRepository.findByLearnerJourneyId(learnerJourneyId);
+        if (items.isEmpty() && units.isEmpty()) return;
 
-        boolean allCompleted = items.stream().allMatch(i -> i.getStatus() == ItemStatus.COMPLETED.getCode());
-        boolean anyStarted = items.stream().anyMatch(i -> i.getStatus() != ItemStatus.NEW.getCode());
+        boolean unitsDone = !units.isEmpty() && units.stream().allMatch(u -> u.getStatus() == ItemStatus.COMPLETED.getCode());
+        boolean examDone = examService.getExam(lj.getJourneyId()) == null
+                || java.util.Optional.ofNullable(examService.getAttempt(lj.getId())).map(a -> Boolean.TRUE.equals(a.passed())).orElse(false);
+        boolean allCompleted = unitsDone && examDone;
+        boolean anyStarted = items.stream().anyMatch(i -> i.getStatus() != ItemStatus.NEW.getCode())
+                || units.stream().anyMatch(u -> u.getStatus() != ItemStatus.NEW.getCode());
         boolean wasCompleted = lj.getStatus() == ItemStatus.COMPLETED.getCode();
 
         if (allCompleted) {

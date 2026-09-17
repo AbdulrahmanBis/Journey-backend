@@ -15,5 +15,7 @@ public record UserDto(
         /** Every person has one. {@code memberCount} is left out here — it describes the department, not the person. */
         DepartmentDto department,
         String seniorId,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /** Intro guide version this person dismissed for good; absent if never. */
+        Integer introSeenVersion
 ) {}

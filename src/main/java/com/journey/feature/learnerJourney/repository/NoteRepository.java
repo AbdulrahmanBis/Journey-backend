@@ -10,4 +10,10 @@ import java.util.List;
 public interface NoteRepository extends JpaRepository<Note, String> {
 
     List<Note> findByLearnerJourneyItemIdOrderByTimestampAsc(String learnerJourneyItemId);
+
+    List<Note> findByLearnerJourneyItemIdIn(java.util.Collection<String> learnerJourneyItemIds);
+
+    List<Note> findByLearnerJourneyUnitIdOrderByTimestampAsc(String learnerJourneyUnitId);
+
+    List<Note> findByLearnerJourneyUnitIdIn(java.util.Collection<String> learnerJourneyUnitIds);
 }

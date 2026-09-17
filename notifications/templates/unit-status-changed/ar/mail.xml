@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>${unitTitle}: ${statusAr}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>غيّر ${actorName} حالة <strong>${unitTitle}</strong> في ${journeyTitle} إلى ${statusAr}.</p>
+      <p><a href="${appUrl}${link}">افتح الرحلة</a></p>
+    </div>
+  ]]></body>
+</mail>

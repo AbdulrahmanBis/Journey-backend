@@ -201,6 +201,17 @@ public class UserService {
         userRepository.delete(user);
     }
 
+    /** "Don't show the intro again" — only ever for the caller's own id, see UserController. */
+    @Transactional
+    public void updateIntroSeenVersion(String id, Integer version) {
+        if (version == null || version < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "version must be a positive number.");
+        }
+        User user = findOrThrow(id);
+        user.setIntroSeenVersion(version);
+        userRepository.save(user);
+    }
+
     /**
      * Stores the language the person picked in the UI, used to choose which language to email them
      * in. Only ever called for the caller's own id — see UserController.
@@ -234,7 +245,8 @@ public class UserService {
         DepartmentDto departmentDto = department == null ? null
                 : new DepartmentDto(department.getId(), department.getNameEn(), department.getNameAr(), null);
         return new UserDto(u.getId(), u.getName(), u.getEmail(),
-                UserRole.fromCode(u.getRole()).toDto(), departmentDto, u.getSeniorId(), u.getCreatedAt());
+                UserRole.fromCode(u.getRole()).toDto(), departmentDto, u.getSeniorId(), u.getCreatedAt(),
+                u.getIntroSeenVersion());
     }
 
     // ─── Validation ───────────────────────────────────────────────────────────

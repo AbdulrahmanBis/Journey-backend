@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>رحلة ${journeyTitle} مستحقة في ${dueDate}</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>رحلتك <strong>${journeyTitle}</strong> مستحقة في <strong>${dueDate}</strong>، أي بعد ${daysLeft} يوم.</p>
+      <p><a href="${appUrl}${link}">افتح الرحلة</a> لتتابع، أو تواصل مع المراجع إذا احتجت وقتًا إضافيًا.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

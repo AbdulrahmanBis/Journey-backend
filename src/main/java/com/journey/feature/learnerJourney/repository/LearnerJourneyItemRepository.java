@@ -12,6 +12,8 @@ public interface LearnerJourneyItemRepository extends JpaRepository<LearnerJourn
 
     List<LearnerJourneyItem> findByLearnerJourneyId(String learnerJourneyId);
 
+    List<LearnerJourneyItem> findByLearnerJourneyIdIn(java.util.Collection<String> learnerJourneyIds);
+
     Optional<LearnerJourneyItem> findByJourneyItemIdAndLearnerJourneyId(String journeyItemId,
                                                                          String learnerJourneyId);
 }

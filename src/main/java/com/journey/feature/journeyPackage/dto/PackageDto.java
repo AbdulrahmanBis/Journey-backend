@@ -7,6 +7,7 @@ public record PackageDto(
         String id,
         String title,
         String description,
+        Integer targetDays,
         String createdById,
         String createdByName,
         LocalDateTime createdAt,

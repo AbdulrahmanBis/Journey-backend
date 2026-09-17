@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>Overdue: ${journeyTitle} (${learnerName})</subject>
+  <body><![CDATA[
+    <p>Hello,</p>
+    <p><strong>${journeyTitle}</strong> for ${learnerName} was due on <strong>${dueDate}</strong> and isn’t finished yet.</p>
+    <p><a href="${appUrl}${link}">Open the journey</a> to see where it stands, or agree a new due date.</p>
+    <p>— Journey</p>
+  ]]></body>
+</mail>

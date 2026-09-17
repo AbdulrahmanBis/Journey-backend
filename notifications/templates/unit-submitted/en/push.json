@@ -1,0 +1,4 @@
+{
+  "title": "${unitTitle} is ready for review",
+  "body": "${learnerName} finished ${unitTitle} in ${journeyTitle}."
+}

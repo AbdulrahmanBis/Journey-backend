@@ -5,5 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 /** The assigner is the signed-in caller. */
 public record AssignPackageRequest(
         @NotBlank String packageId,
-        @NotBlank String learnerId
+        @NotBlank String learnerId,
+        /** Optional; defaults to today + the package's target days, if it has any. */
+        java.time.LocalDate dueDate
 ) {}

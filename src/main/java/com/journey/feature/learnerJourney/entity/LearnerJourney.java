@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -36,6 +37,18 @@ public class LearnerJourney {
     @Column(name = "assigned_at")
     @Builder.Default
     private LocalDateTime assignedAt = LocalDateTime.now();
+
+    /** When the learner should finish; null means no deadline. */
+    @Column(name = "due_date")
+    private LocalDate dueDate;
+
+    /** Set when the "due soon" reminder went out for the current due date. */
+    @Column(name = "due_soon_notified_at")
+    private LocalDateTime dueSoonNotifiedAt;
+
+    /** Set when the "overdue" reminder went out for the current due date. */
+    @Column(name = "overdue_notified_at")
+    private LocalDateTime overdueNotifiedAt;
 
     /**
      * The learner enrolled from the catalog. assignedBy then holds their reviewer (senior, or a

@@ -33,6 +33,10 @@ public class JourneyPackage {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    /** Expected duration of the whole package in days; the default due date when assigned. */
+    @Column(name = "target_days")
+    private Integer targetDays;
+
     @Column(name = "created_by_id", length = 36)
     private String createdById;
 

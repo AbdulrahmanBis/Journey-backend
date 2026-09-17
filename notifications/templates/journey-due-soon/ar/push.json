@@ -1,0 +1,4 @@
+{
+  "title": "موعد ${journeyTitle} يقترب",
+  "body": "مستحقة في ${dueDate} (متبقٍ ${daysLeft} يوم). افتحها لتتابع."
+}

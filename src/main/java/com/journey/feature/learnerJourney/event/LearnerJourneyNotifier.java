@@ -36,6 +36,10 @@ public class LearnerJourneyNotifier {
     private static final String ITEM_STATUS_CHANGED = "item-status-changed";
     private static final String JOURNEY_COMPLETED = "journey-completed";
     private static final String JOURNEY_CANCELLED = "journey-cancelled";
+    private static final String JOURNEY_DUE_SOON = "journey-due-soon";
+    private static final String UNIT_SUBMITTED = "unit-submitted";
+    private static final String UNIT_STATUS_CHANGED = "unit-status-changed";
+    private static final String JOURNEY_OVERDUE = "journey-overdue";
 
     private final NotificationDispatcher notifications;
 
@@ -113,6 +117,57 @@ public class LearnerJourneyNotifier {
         notifications.dispatch(NotificationRequest.forTemplate(JOURNEY_CANCELLED)
                 .party("learner", event.learnerId())
                 .variable("journeyTitle", event.journeyTitle())
+                .variable("learnerJourneyId", event.learnerJourneyId())
+                .build());
+    }
+
+    /** The reviewer (assigner) has something to look at. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onUnitSubmitted(UnitSubmittedEvent event) {
+        notifications.dispatch(NotificationRequest.forTemplate(UNIT_SUBMITTED)
+                .party("assigner", event.assignerId())
+                .variable("learnerName", nameOf(event.learnerId()))
+                .variable("journeyTitle", event.journeyTitle())
+                .variable("unitTitle", event.unitTitle())
+                .variable("learnerJourneyId", event.learnerJourneyId())
+                .build());
+    }
+
+    /** Only when someone other than the learner moved it, like item changes. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onUnitStatusChanged(UnitStatusChangedEvent event) {
+        if (event.actorId() == null || event.actorId().equals(event.learnerId())) return;
+        notifications.dispatch(NotificationRequest.forTemplate(UNIT_STATUS_CHANGED)
+                .party("learner", event.learnerId())
+                .variable("actorName", nameOf(event.actorId()))
+                .variable("journeyTitle", event.journeyTitle())
+                .variable("unitTitle", event.unitTitle())
+                .variable("statusEn", event.statusEnglish())
+                .variable("statusAr", event.statusArabic())
+                .variable("learnerJourneyId", event.learnerJourneyId())
+                .build());
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onJourneyDueSoon(JourneyDueSoonEvent event) {
+        notifications.dispatch(NotificationRequest.forTemplate(JOURNEY_DUE_SOON)
+                .party("learner", event.learnerId())
+                .variable("journeyTitle", event.journeyTitle())
+                .variable("dueDate", event.dueDate().toString())
+                .variable("daysLeft", String.valueOf(event.daysLeft()))
+                .variable("learnerJourneyId", event.learnerJourneyId())
+                .build());
+    }
+
+    /** The learner, and whoever assigned it (for a self-enrollment, their reviewer). */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onJourneyOverdue(JourneyOverdueEvent event) {
+        notifications.dispatch(NotificationRequest.forTemplate(JOURNEY_OVERDUE)
+                .party("learner", event.learnerId())
+                .party("assigner", event.assignerId())
+                .variable("learnerName", nameOf(event.learnerId()))
+                .variable("journeyTitle", event.journeyTitle())
+                .variable("dueDate", event.dueDate().toString())
                 .variable("learnerJourneyId", event.learnerJourneyId())
                 .build());
     }

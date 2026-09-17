@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mail>
+  <subject>متأخرة: ${journeyTitle} (${learnerName})</subject>
+  <body><![CDATA[
+    <div dir="rtl" lang="ar">
+      <p>مرحبًا،</p>
+      <p>رحلة <strong>${journeyTitle}</strong> الخاصة بـ ${learnerName} كانت مستحقة في <strong>${dueDate}</strong> ولم تكتمل بعد.</p>
+      <p><a href="${appUrl}${link}">افتح الرحلة</a> لمعرفة وضعها، أو اتفقوا على موعد جديد.</p>
+      <p>— Journey</p>
+    </div>
+  ]]></body>
+</mail>

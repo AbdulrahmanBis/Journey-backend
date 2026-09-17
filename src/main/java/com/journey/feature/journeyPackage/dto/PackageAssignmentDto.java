@@ -2,6 +2,7 @@ package com.journey.feature.journeyPackage.dto;
 
 import com.journey.common.dto.EnumValueDto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -21,6 +22,7 @@ public record PackageAssignmentDto(
         String assignedById,
         String assignedByName,
         LocalDateTime assignedAt,
+        LocalDate dueDate,
         boolean selfEnrolled,
         LocalDateTime cancelledAt,
         EnumValueDto status,

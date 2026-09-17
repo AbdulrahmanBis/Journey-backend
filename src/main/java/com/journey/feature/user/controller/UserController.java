@@ -82,6 +82,13 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    /** PATCH /api/users/me/intro  { "version": 1 } — the caller dismissed the intro guide for good. */
+    @PatchMapping("/me/intro")
+    public ResponseEntity<Void> updateMyIntro(@RequestBody Map<String, Integer> body) {
+        userService.updateIntroSeenVersion(access.actor().getId(), body.get("version"));
+        return ResponseEntity.noContent().build();
+    }
+
     /** DELETE /api/users/:id */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable String id) {

@@ -22,8 +22,12 @@ public class Note {
     private String id;
 
     /** FK to LearnerJourneyItem.id — stored as a plain column (not a JPA join) for simplicity. */
-    @Column(name = "learner_journey_item_id", nullable = false, length = 36)
+    @Column(name = "learner_journey_item_id", length = 36)
     private String learnerJourneyItemId;
+
+    /** Set instead of the item id for unit-level notes (review feedback). */
+    @Column(name = "learner_journey_unit_id", length = 36)
+    private String learnerJourneyUnitId;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String message;
